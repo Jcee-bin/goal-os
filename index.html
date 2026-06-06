@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Budget Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="focus-timer.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Dollarwise style</p>
+          <h1>Money Plan</h1>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost-button" href="goal-os.html">Goal OS</a>
+          <button class="ghost-button" id="resetButton" type="button">Reset</button>
+        </div>
+      </header>
+
+      <section class="balance-panel" aria-label="Current balances">
+        <div class="total-block">
+          <span>Safe to Spend</span>
+          <strong id="safeBalance">₱0.00</strong>
+          <p id="safeSummary">Cash and bank after planned payments.</p>
+        </div>
+
+        <div class="stat-strip">
+          <section class="stat-group">
+            <p class="stat-group-label">What you have</p>
+            <div class="stat-tiles">
+              <article class="stat-tile tile-cash">
+                <span>Cash</span>
+                <strong id="cashBalance">₱0.00</strong>
+                <svg class="sparkline" id="sparkCash" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+              <article class="stat-tile tile-bank">
+                <span>Bank</span>
+                <strong id="bankBalance">₱0.00</strong>
+                <svg class="sparkline" id="sparkBank" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+              <article class="stat-tile tile-savings">
+                <span>Savings</span>
+                <strong id="savingsBalance">₱0.00</strong>
+                <svg class="sparkline" id="sparkSavings" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+            </div>
+          </section>
+
+          <section class="stat-group">
+            <p class="stat-group-label">Flow</p>
+            <div class="stat-tiles">
+              <article class="stat-tile">
+                <span>Total Spent</span>
+                <strong id="spentTotal" class="value-out">₱0.00</strong>
+                <svg class="sparkline" id="sparkSpent" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+              <article class="stat-tile">
+                <span>To Pay</span>
+                <strong id="pendingTotal" class="value-pending">₱0.00</strong>
+                <svg class="sparkline" id="sparkPending" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+            </div>
+          </section>
+
+          <section class="stat-group">
+            <p class="stat-group-label">Totals</p>
+            <div class="stat-tiles">
+              <article class="stat-tile">
+                <span>Current Money</span>
+                <strong id="totalBalance">₱0.00</strong>
+                <svg class="sparkline" id="sparkTotal" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+              <article class="stat-tile">
+                <span>Total Tracked</span>
+                <strong id="trackedTotal">₱0.00</strong>
+                <svg class="sparkline" id="sparkTracked" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="analysis-section" aria-label="Spending analysis">
+        <div class="analysis-header">
+          <h2>Analysis</h2>
+          <div class="period-pills" role="group" aria-label="Time period">
+            <button class="period-btn" type="button" data-period="week">This week</button>
+            <button class="period-btn active" type="button" data-period="month">This month</button>
+            <button class="period-btn" type="button" data-period="lastmonth">Last month</button>
+            <button class="period-btn" type="button" data-period="all">All time</button>
+          </div>
+        </div>
+
+        <div class="analysis-row">
+          <article class="chart-card trend-card" aria-label="Spending trend">
+            <div class="section-title">
+              <div>
+                <h2>Spending trend</h2>
+                <span id="trendPeriodLabel">This month</span>
+              </div>
+            </div>
+            <div class="trend-wrap">
+              <svg class="trend-chart" id="trendChart" aria-label="Spending trend chart"></svg>
+              <div class="chart-tooltip" id="trendTooltip" hidden></div>
+            </div>
+          </article>
+
+          <article class="chart-card donut-card split-chart" aria-label="50/30/20 split">
+            <div class="section-title">
+              <div>
+                <h2>Split Chart</h2>
+                <span id="donutModeLabel">Current</span>
+              </div>
+              <div class="mode-toggle" aria-label="50 30 20 mode">
+                <button class="active" id="currentSplitButton" type="button">Current</button>
+                <button id="projectedSplitButton" type="button">Projected</button>
+              </div>
+            </div>
+            <div class="donut-wrap">
+              <div class="donut-chart" id="splitDonut" aria-label="Category split chart">
+                <div>
+                  <strong id="donutTotal">₱0.00</strong>
+                  <span id="donutCaption">counted</span>
+                </div>
+              </div>
+              <div class="chart-legend">
+                <span data-donut-slice="needs"><i class="legend-needs"></i>Needs <b id="needsAmount">₱0.00</b> · <b id="needsPercent">0%</b> <small>target 50%</small></span>
+                <span data-donut-slice="wants"><i class="legend-wants"></i>Wants <b id="wantsAmount">₱0.00</b> · <b id="wantsPercent">0%</b> <small>target 30%</small></span>
+                <span data-donut-slice="savings"><i class="legend-savings"></i>Debt/Saving <b id="splitSavingsAmount">₱0.00</b> · <b id="splitSavingsPercent">0%</b> <small>target 20%</small></span>
+              </div>
+              <div class="chart-tooltip" id="donutTooltip" hidden></div>
+            </div>
+            <div hidden>
+              <i id="needsBar"></i>
+              <i id="wantsBar"></i>
+              <i id="savingsBar"></i>
+              <span id="splitModeLabel"></span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="chart-panel" aria-label="Budget charts">
+        <article class="chart-card">
+          <div class="section-title">
+            <div>
+              <h2>To Pay Shape</h2>
+              <span>Pending only</span>
+            </div>
+          </div>
+          <div class="mini-bars">
+            <div>
+              <span>Needs</span>
+              <div><i id="pendingNeedsBar"></i></div>
+              <b id="pendingNeedsAmount">₱0.00</b>
+            </div>
+            <div>
+              <span>Wants</span>
+              <div><i id="pendingWantsBar"></i></div>
+              <b id="pendingWantsAmount">₱0.00</b>
+            </div>
+            <div>
+              <span>Debt/Saving</span>
+              <div><i id="pendingSavingsBar"></i></div>
+              <b id="pendingSavingsAmount">₱0.00</b>
+            </div>
+          </div>
+        </article>
+
+        <article class="chart-card">
+          <div class="section-title">
+            <div>
+              <h2>Biggest Charges</h2>
+              <span>This month</span>
+            </div>
+          </div>
+          <div class="top-list" id="topChargesList"></div>
+        </article>
+      </section>
+
+      <section class="workspace" aria-label="Add a transaction">
+        <div class="segmented form-switch" role="tablist" aria-label="Entry type">
+          <button class="form-tab" type="button" data-form-tab="money">Add Money</button>
+          <button class="form-tab active" type="button" data-form-tab="expense">Add Expense</button>
+          <button class="form-tab" type="button" data-form-tab="savings">Set Aside</button>
+        </div>
+
+        <form class="entry-form" id="moneyForm" data-form-panel="money" hidden>
+          <div class="form-heading">
+            <h2>Add Money</h2>
+            <p>Record income or money you already have.</p>
+          </div>
+          <label>
+            Amount
+            <input id="moneyAmount" type="number" min="0.01" step="0.01" placeholder="0.00" required />
+          </label>
+          <label>
+            Where is it?
+            <select id="moneyAccount" required>
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+            </select>
+          </label>
+          <label>
+            Note
+            <input id="moneyNote" type="text" placeholder="Salary, allowance, savings" />
+          </label>
+          <button type="submit">Add Money</button>
+        </form>
+
+        <form class="entry-form" id="expenseForm" data-form-panel="expense">
+          <div class="form-heading">
+            <h2>Add Expense</h2>
+            <p>Subtract spending from cash or bank.</p>
+          </div>
+          <label>
+            Amount
+            <input id="expenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00" required />
+          </label>
+          <label>
+            Paid from
+            <select id="expenseAccount" required>
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select id="expenseStatus" required>
+              <option value="paid">Paid now</option>
+              <option value="pending">To pay</option>
+            </select>
+          </label>
+          <label>
+            Expense
+            <input id="expenseNote" type="text" placeholder="Food, fare, bills" required />
+          </label>
+          <label>
+            Budget type
+            <select id="expenseCategory" required>
+              <option value="needs">Needs</option>
+              <option value="wants">Wants</option>
+              <option value="savings">Debt/Saving</option>
+            </select>
+          </label>
+          <button type="submit">Add Expense</button>
+        </form>
+
+        <form class="entry-form" id="savingsForm" data-form-panel="savings" hidden>
+          <div class="form-heading">
+            <h2>Set Aside</h2>
+            <p>Move money from cash or bank into savings.</p>
+          </div>
+          <label>
+            Amount
+            <input id="savingsAmount" type="number" min="0.01" step="0.01" placeholder="0.00" required />
+          </label>
+          <label>
+            Take from
+            <select id="savingsAccount" required>
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+            </select>
+          </label>
+          <label>
+            Reason
+            <input id="savingsNote" type="text" placeholder="Emergency fund, goal, bills" />
+          </label>
+          <button type="submit">Save Money</button>
+        </form>
+      </section>
+
+      <section class="history-section" aria-label="Transaction history">
+        <div class="section-title">
+          <div>
+            <h2>History</h2>
+            <span id="entryCount">0 entries</span>
+          </div>
+          <div class="selected-total">
+            <span>Checked spent</span>
+            <strong id="checkedTotal">₱0.00</strong>
+          </div>
+        </div>
+        <div class="history-filters" aria-label="History filters">
+          <label>
+            Show
+            <select id="historyFilter">
+              <option value="all">All logs</option>
+              <option value="to-pay">To pay</option>
+              <option value="paid">Paid</option>
+              <option value="needs">Needs</option>
+              <option value="wants">Wants</option>
+              <option value="savings">Debt/Saving</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+          <label>
+            From
+            <input id="filterStartDate" type="date" />
+          </label>
+          <label>
+            To
+            <input id="filterEndDate" type="date" />
+          </label>
+          <button class="mini-button" id="clearDateFilterButton" type="button">Clear filters</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+        <div class="pagination-bar" aria-label="History pages">
+          <button class="mini-button" id="previousPageButton" type="button">Previous</button>
+          <span id="pageStatus">Page 1 of 1</span>
+          <button class="mini-button" id="nextPageButton" type="button">Next</button>
+        </div>
+      </section>
+    </main>
+
+    <div class="bulk-actions" aria-label="Selected transaction actions" hidden>
+      <span id="selectedCount">0 selected</span>
+      <div class="bulk-buttons">
+        <label class="pay-from-control">
+          Pay from
+          <select id="bulkPayAccount">
+            <option value="cash">Cash</option>
+            <option value="bank">Bank</option>
+            <option value="savings">Savings</option>
+          </select>
+        </label>
+        <label class="pay-from-control">
+          Category
+          <select id="bulkCategory">
+            <option value="expense:needs">Charge: Needs</option>
+            <option value="expense:wants">Charge: Wants</option>
+            <option value="expense:savings">Charge: Debt/Saving</option>
+            <option value="income:income">Addition: Income</option>
+            <option value="income:savings">Addition: Saving</option>
+          </select>
+        </label>
+        <button class="mini-button" id="categorySelectedButton" type="button">Apply category</button>
+        <button class="mini-button danger" id="deleteSelectedButton" type="button">Delete</button>
+        <button class="mini-button" id="toPaySelectedButton" type="button">To pay</button>
+        <button class="mini-button" id="paidSelectedButton" type="button">Paid</button>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script src="focus-timer.js"></script>
+  </body>
+</html>

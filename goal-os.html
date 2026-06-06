@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Goal OS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="goal-os.css" />
+    <link rel="stylesheet" href="focus-timer.css" />
+  </head>
+  <body>
+    <aside class="sidebar" aria-label="Goal OS navigation">
+      <div class="brand">
+        <div class="brand-icon">ID</div>
+        <div>
+          <strong>Goal OS</strong>
+          <span>Personal Evolution</span>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <a href="#dashboard" data-view="dashboard">Dashboard</a>
+        <a href="#habits" data-view="habits">Habits</a>
+        <a href="#identity" data-view="identity">Identity Setup</a>
+        <a class="nav-external" href="index.html">Budget Tracker</a>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="sidebar-button danger" id="resetAppButton" type="button">Reset Logs</button>
+      </div>
+    </aside>
+
+    <header class="mobile-topbar">
+      <strong>Goal OS</strong>
+      <span id="mobileViewLabel">Dashboard</span>
+    </header>
+
+    <main class="main-canvas">
+      <section class="view" id="view-identity" data-view-panel="identity">
+        <section class="identity-stage" id="identity">
+          <div class="stage-heading">
+            <h1>Define Your Identity</h1>
+            <p>Identity is the foundation of change. Shift who you are to change what you do.</p>
+          </div>
+
+          <form class="identity-card" id="identityForm">
+            <label>
+              <span>Who are you becoming?</span>
+              <textarea id="identityInput" maxlength="140" placeholder="I am becoming someone who keeps promises to myself."></textarea>
+            </label>
+
+            <label>
+              <span>Choose your primary arena</span>
+              <select id="arenaInput">
+                <option value="health">Health</option>
+                <option value="mind">Mind</option>
+                <option value="business">Business</option>
+                <option value="school">School</option>
+                <option value="life">Life</option>
+              </select>
+            </label>
+
+            <div class="quote-card">
+              <b>"</b>
+              <p>Every action is a vote for the person you wish to become.</p>
+            </div>
+
+            <button type="submit">Confirm My Identity</button>
+          </form>
+        </section>
+      </section>
+
+      <section class="view" id="view-dashboard" data-view-panel="dashboard">
+        <section class="dashboard-band" id="dashboard">
+          <div class="identity-summary">
+            <p class="eyebrow">Current identity</p>
+            <h2 id="identityStatement">I am becoming someone who keeps promises to myself.</h2>
+            <button class="summary-link" type="button" data-view="identity">Edit identity</button>
+          </div>
+
+          <section class="level-card" aria-label="XP progress">
+            <div>
+              <span>Level <b id="levelNumber">1</b></span>
+              <strong id="xpTotal">0 XP</strong>
+            </div>
+            <div class="xp-track"><i id="xpBar"></i></div>
+            <p id="xpToNext">100 XP to Level 2</p>
+            <p class="productive-meter"><b id="productivityPercent">0%</b> productive today</p>
+          </section>
+        </section>
+
+        <section class="dashboard-layout">
+          <aside class="dashboard-rail">
+            <section class="module today-module" id="stats">
+              <div class="module-title compact-title">
+                <div>
+                  <h2>Today</h2>
+                  <span id="todayDate">Today</span>
+                </div>
+              </div>
+              <div class="today-list">
+                <article>
+                  <span>Today's XP</span>
+                  <strong id="todayXp">0</strong>
+                </article>
+                <button class="stat-shortcut" id="habitsShortcut" type="button" data-view="habits">
+                  <span>Habits</span>
+                  <strong id="habitsDone">0/0</strong>
+                </button>
+                <article>
+                  <span>Streak</span>
+                  <strong><b id="bestStreak">0</b> days</strong>
+                </article>
+              </div>
+              <div class="productivity-card">
+                <span>Productive meter</span>
+                <strong id="productivityLabel">0%</strong>
+                <div class="productivity-track"><i id="productivityBar"></i></div>
+              </div>
+            </section>
+
+            <section class="module finance-module">
+              <div class="module-title compact-title">
+                <div>
+                  <h2>Money</h2>
+                  <span>Budget tracker sync</span>
+                </div>
+              </div>
+              <div class="finance-list">
+                <article>
+                  <span>Safe to spend</span>
+                  <strong id="financeSafe">PHP 0.00</strong>
+                </article>
+                <article>
+                  <span>Current money</span>
+                  <strong id="financeCurrent">PHP 0.00</strong>
+                </article>
+                <article>
+                  <span>Savings</span>
+                  <strong id="financeSavings">PHP 0.00</strong>
+                </article>
+                <article>
+                  <span>To pay</span>
+                  <strong id="financePending">PHP 0.00</strong>
+                </article>
+              </div>
+              <div class="finance-split">
+                <span>50/30/20 this month</span>
+                <strong id="financeSplit">No spending yet</strong>
+              </div>
+              <a class="module-link" href="index.html">Open Budget Tracker</a>
+            </section>
+
+            <section class="module evidence-module">
+              <div class="module-title compact-title">
+                <div>
+                  <h2>Evidence Log</h2>
+                  <span>Latest proof</span>
+                </div>
+              </div>
+              <div class="evidence-list" id="evidenceList"></div>
+            </section>
+          </aside>
+
+          <section class="dashboard-main">
+            <section class="module goals-module" id="goals">
+              <div class="module-title">
+                <div>
+                  <h2>Action Goals</h2>
+                  <span>Measurable growth toward your targets</span>
+                </div>
+              </div>
+              <form class="goal-form" id="goalForm">
+                <input id="goalName" type="text" placeholder="Goal, e.g. finish module 1" required />
+                <div>
+                  <input id="goalTarget" type="number" min="1" step="1" placeholder="Target" required />
+                  <select id="goalUnit">
+                    <option value="times">times</option>
+                    <option value="pages">pages</option>
+                    <option value="tasks">tasks</option>
+                    <option value="minutes">minutes</option>
+                    <option value="pesos">pesos</option>
+                  </select>
+                  <select id="goalCadence" aria-label="Goal reset">
+                    <option value="ongoing">Ongoing</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                </div>
+                <button type="submit">Add Goal</button>
+              </form>
+              <div class="goal-list" id="goalList"></div>
+            </section>
+
+            <section class="bottom-grid" id="habitLab">
+              <article class="habit-lab-card">
+                <div class="habit-lab-top">
+                  <span>Habit Lab</span>
+                  <div class="habit-lab-controls">
+                    <button id="habitTipPrev" type="button" aria-label="Previous habit tip">&lt;</button>
+                    <button id="habitTipNext" type="button" aria-label="Next habit tip">&gt;</button>
+                  </div>
+                </div>
+                <strong id="habitTipTitle">Make it obvious</strong>
+                <p id="habitTipText">Put the cue where your eyes already go. Shoes by the door, book on the desk, water beside the bed.</p>
+                <small id="habitTipCounter">1/4</small>
+              </article>
+              <article class="milestone-card">
+                <span>Next milestone</span>
+                <strong id="milestoneTitle">Master of Focus</strong>
+                <p id="milestoneProgress">Complete 20 identity votes.</p>
+                <div class="milestone-track"><i id="milestoneBar"></i></div>
+              </article>
+              <article class="insight-card">
+                <span>System Insight</span>
+                <strong>Growth Curve</strong>
+                <p>Your productivity rises when habits have a clear time cue.</p>
+              </article>
+            </section>
+          </section>
+        </section>
+      </section>
+
+      <section class="view" id="view-habits" data-view-panel="habits">
+        <section class="module habits-module" id="habits">
+          <div class="module-title">
+            <div>
+              <h2>Healthy Habits</h2>
+              <span>Consistent actions define your character</span>
+            </div>
+          </div>
+          <form class="inline-form" id="habitForm">
+            <input id="habitName" type="text" placeholder="New habit..." required />
+            <select id="habitTarget" aria-label="Times per day">
+              <option value="1">1/day</option>
+              <option value="2">2/day</option>
+              <option value="3">3/day</option>
+              <option value="4">4/day</option>
+              <option value="5">5/day</option>
+              <option value="10">10/day</option>
+            </select>
+            <select id="habitCue" aria-label="Time of day">
+              <option value="anytime">Anytime</option>
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+              <option value="evening">Evening</option>
+              <option value="night">Night</option>
+            </select>
+            <select id="habitXp">
+              <option value="10">10 XP</option>
+              <option value="15">15 XP</option>
+              <option value="25">25 XP</option>
+            </select>
+            <button type="submit">+</button>
+          </form>
+          <div class="habit-list" id="habitList"></div>
+        </section>
+      </section>
+    </main>
+
+    <nav class="mobile-nav">
+      <button type="button" data-view="dashboard">Dash</button>
+      <button type="button" data-view="habits">Habits</button>
+      <button type="button" data-view="identity">Identity</button>
+      <a href="index.html">Budget</a>
+      <button id="resetMobileButton" type="button">Reset</button>
+    </nav>
+
+    <div class="habit-popup" id="habitPopup" hidden></div>
+
+    <script src="goal-os.js"></script>
+    <script src="focus-timer.js"></script>
+  </body>
+</html>
