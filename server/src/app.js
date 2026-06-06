@@ -2,7 +2,9 @@ import cors from 'cors'
 import express from 'express'
 import { LOCAL_USER_ID } from './domain.js'
 import { createActivityRouter } from './routes/activityRoutes.js'
+import { createFinanceRouter } from './routes/financeRoutes.js'
 import { createActivityService } from './services/activityService.js'
+import { createFinanceService } from './services/financeService.js'
 
 export function createApp({ db, now }) {
   if (!db) throw new Error('createApp requires a database')
@@ -17,7 +19,9 @@ export function createApp({ db, now }) {
   })
 
   const activityService = createActivityService({ db, userId: LOCAL_USER_ID, now })
+  const financeService = createFinanceService({ db, userId: LOCAL_USER_ID, now })
   app.use('/api', createActivityRouter(activityService))
+  app.use('/api', createFinanceRouter(financeService))
 
   app.use((error, _request, response, _next) => {
     const status = error.status || 500
