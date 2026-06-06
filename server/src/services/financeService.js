@@ -238,7 +238,8 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
 
     analytics(options = {}) {
       const period = options.period || 'month'
-      const entries = all().filter((entry) => isInPeriod(entry.transactionOn, period, now()))
+      const allEntries = all()
+      const entries = allEntries.filter((entry) => isInPeriod(entry.transactionOn, period, now()))
       const paidExpenses = entries.filter(isPaidExpense)
       const trendMap = new Map()
       for (const entry of paidExpenses) {
@@ -258,6 +259,7 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
           .filter((entry) => entry.type === 'expense')
           .sort((left, right) => right.amountCentavos - left.amountCentavos)
           .slice(0, 5),
+        sparklines: balanceTimeline(allEntries, now()),
       }
     },
 
@@ -297,6 +299,41 @@ function categorySplit(entries, projected) {
 
 function percent(amount, total) {
   return total ? Math.round((amount / total) * 100) : 0
+}
+
+function balanceTimeline(entries, today) {
+  const points = []
+  for (let offset = 13; offset >= 0; offset -= 1) {
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
+    const dateKey = getDateKey(date)
+    const available = entries.filter((entry) => entry.transactionOn <= dateKey)
+    const accountBalances = available.reduce(
+      (result, entry) => {
+        if (entry.type === 'income') result[entry.account] += entry.amountCentavos
+        if (entry.type === 'expense' && entry.status === 'paid') {
+          result[entry.account] -= entry.amountCentavos
+        }
+        if (entry.type === 'saving') {
+          result[entry.account] -= entry.amountCentavos
+          result.savings += entry.amountCentavos
+        }
+        return result
+      },
+      { cash: 0, bank: 0, savings: 0 },
+    )
+    const spent = sum(available.filter(isPaidExpense))
+    const pending = sum(available.filter(isPendingExpense))
+    const currentMoney = accountBalances.cash + accountBalances.bank + accountBalances.savings
+    points.push({
+      date: dateKey,
+      ...accountBalances,
+      spent,
+      pending,
+      currentMoney,
+      totalTracked: currentMoney + spent,
+    })
+  }
+  return points
 }
 
 function matchesFilter(entry, filter) {

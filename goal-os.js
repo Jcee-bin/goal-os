@@ -102,6 +102,24 @@ const elements = {
   resetMobileButton: document.querySelector("#resetMobileButton"),
 };
 
+const exportLegacyButton = document.querySelector("#exportLegacyButton");
+if (exportLegacyButton) {
+  exportLegacyButton.addEventListener("click", () => {
+    const payload = {
+      goal: JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"),
+      budget: JSON.parse(localStorage.getItem(BUDGET_STORAGE_KEY) || "null"),
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "goal-os-legacy-export.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
 elements.identityForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.identity = elements.identityInput.value.trim() || defaultState.identity;

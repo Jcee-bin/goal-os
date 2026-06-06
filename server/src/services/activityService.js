@@ -297,6 +297,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
     analytics,
 
     dashboard() {
+      const time = clock()
       const profile = this.getProfile()
       const habits = listHabits()
       const goals = listGoals()
@@ -310,6 +311,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
         goals,
         evidence: repository.listEvidence(userId, 8),
         analytics: activity,
+        today: time.eventOn,
       }
     },
 

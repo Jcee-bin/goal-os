@@ -1,0 +1,445 @@
+/* Floating, draggable focus timer — shared across Goal OS and Budget Tracker.
+   Self-contained: all tokens scoped here so it looks identical on both pages. */
+#focusTimerWidget {
+  --ft-primary: #004532;
+  --ft-primary-text: #8bd6b7;
+  --ft-surface: #fefdfb;
+  --ft-surface-low: #f4f3f2;
+  --ft-surface-high: #e9e8e7;
+  --ft-line: #e3e2e1;
+  --ft-outline: #bec9c2;
+  --ft-muted: #3f4944;
+  --ft-text: #1a1c1c;
+  --ft-shadow: 0 14px 36px rgba(25, 33, 30, 0.18);
+
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  width: 248px;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ft-text);
+  user-select: none;
+  touch-action: none;
+}
+
+#focusTimerWidget * {
+  box-sizing: border-box;
+}
+
+/* ── Full card ── */
+.ft-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--ft-line);
+  border-radius: 16px;
+  background: var(--ft-surface);
+  padding: 16px;
+  box-shadow: var(--ft-shadow);
+}
+
+#focusTimerWidget.is-collapsed .ft-card {
+  display: none;
+}
+
+.ft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: grab;
+  margin: -2px 0;
+}
+
+.ft-header.is-dragging {
+  cursor: grabbing;
+}
+
+.ft-title {
+  color: var(--ft-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ft-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ft-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.ft-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ft-surface-high);
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.ft-dots i.is-filled {
+  background: var(--ft-primary);
+  transform: scale(1.15);
+}
+
+.ft-min {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ft-line);
+  border-radius: 7px;
+  background: var(--ft-surface-low);
+  color: var(--ft-muted);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.ft-min:hover {
+  background: var(--ft-surface-high);
+  color: var(--ft-text);
+}
+
+.ft-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--ft-surface-low);
+}
+
+.ft-modes button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ft-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.ft-modes button:hover {
+  color: var(--ft-text);
+}
+
+.ft-modes button.is-active {
+  background: var(--ft-primary);
+  color: var(--ft-primary-text);
+}
+
+.ft-dial {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto;
+}
+
+.ft-dial svg {
+  width: 150px;
+  height: 150px;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.ft-track {
+  fill: none;
+  stroke: var(--ft-surface-high);
+  stroke-width: 8;
+}
+
+.ft-progress {
+  fill: none;
+  stroke: var(--ft-primary);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 240ms ease;
+}
+
+.ft-readout {
+  position: absolute;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+}
+
+.ft-readout strong {
+  color: var(--ft-text);
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-readout span {
+  color: var(--ft-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ft-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.ft-toggle {
+  flex: 1;
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ft-primary);
+  color: #fefdfb;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+.ft-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.ft-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-height: 42px;
+  border: 1px solid var(--ft-outline);
+  border-radius: 9px;
+  background: var(--ft-surface-low);
+  color: var(--ft-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.ft-icon:hover {
+  background: var(--ft-surface-high);
+  color: var(--ft-text);
+}
+
+/* ── Settings panel ── */
+.ft-settings {
+  display: none;
+  gap: 14px;
+  border: 1px solid var(--ft-line);
+  border-radius: 16px;
+  background: var(--ft-surface);
+  padding: 16px;
+  box-shadow: var(--ft-shadow);
+}
+
+#focusTimerWidget.is-settings .ft-card {
+  display: none;
+}
+
+#focusTimerWidget.is-settings .ft-settings {
+  display: grid;
+}
+
+.ft-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ft-line);
+  padding-bottom: 12px;
+}
+
+.ft-settings-head span {
+  color: var(--ft-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ft-group-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ft-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ft-time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ft-time-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--ft-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.ft-time-grid input,
+.ft-num {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--ft-line);
+  border-radius: 8px;
+  background: var(--ft-surface-low);
+  color: var(--ft-text);
+  font: inherit;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.ft-time-grid input:focus,
+.ft-num:focus {
+  outline: 2px solid var(--ft-primary);
+  outline-offset: 1px;
+}
+
+.ft-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ft-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.ft-num {
+  width: 60px;
+  flex: none;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.ft-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.ft-switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ft-switch > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--ft-surface-high);
+  transition: background 160ms ease;
+}
+
+.ft-switch > span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fefdfb;
+  box-shadow: 0 1px 3px rgba(25, 33, 30, 0.25);
+  transition: transform 160ms ease;
+}
+
+.ft-switch input:checked + span {
+  background: var(--ft-primary);
+}
+
+.ft-switch input:checked + span::after {
+  transform: translateX(20px);
+}
+
+/* ── Collapsed pill ── */
+.ft-pill {
+  display: none;
+  align-items: center;
+  gap: 9px;
+  width: auto;
+  border: 1px solid var(--ft-line);
+  border-radius: 999px;
+  background: var(--ft-surface);
+  padding: 9px 14px 9px 12px;
+  box-shadow: var(--ft-shadow);
+  cursor: grab;
+  font: inherit;
+}
+
+#focusTimerWidget.is-collapsed {
+  width: auto;
+}
+
+#focusTimerWidget.is-collapsed .ft-pill {
+  display: inline-flex;
+}
+
+.ft-pill.is-dragging {
+  cursor: grabbing;
+}
+
+.ft-pill-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ft-outline);
+}
+
+.ft-pill.is-running .ft-pill-dot {
+  background: var(--ft-primary);
+}
+
+.ft-pill-time {
+  color: var(--ft-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ft-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+#focusTimerWidget.is-complete .ft-card,
+#focusTimerWidget.is-complete .ft-pill {
+  animation: ft-pulse 520ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-progress,
+  .ft-toggle { transition: none; }
+  #focusTimerWidget.is-complete .ft-card,
+  #focusTimerWidget.is-complete .ft-pill { animation: none; }
+}
+
+/* Hide on small screens to avoid covering content / mobile nav */
+@media (max-width: 620px) {
+  #focusTimerWidget { display: none; }
+}

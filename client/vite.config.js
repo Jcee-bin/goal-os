@@ -9,4 +9,8 @@ export default defineConfig({
       '/api': 'http://localhost:8787',
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+  },
 })

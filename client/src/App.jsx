@@ -1,154 +1,168 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import './App.css'
+import { api } from './api/client'
+import AppShell from './components/AppShell'
+import DashboardView from './features/dashboard/DashboardView'
+import GoalsView from './features/goals/GoalsView'
+import HabitsView from './features/habits/HabitsView'
+import IdentityView from './features/identity/IdentityView'
+import LegacyImport from './features/import/LegacyImport'
 
-const cueOrder = ['morning', 'afternoon', 'night', 'anytime']
+const AnalyticsView = lazy(() => import('./features/analytics/AnalyticsView'))
+const BudgetView = lazy(() => import('./features/budget/BudgetView'))
 
 function App() {
-  const [state, setState] = useState(null)
   const [activeView, setActiveView] = useState('dashboard')
+  const [dashboard, setDashboard] = useState(null)
+  const [finance, setFinance] = useState(null)
+  const [financeAnalytics, setFinanceAnalytics] = useState(null)
   const [error, setError] = useState('')
+
+  const loadEverything = useCallback(async () => {
+    const [nextDashboard, nextFinance, nextFinanceAnalytics] = await Promise.all([
+      api('/dashboard'),
+      api('/budget/summary'),
+      api('/budget/analytics?period=month'),
+    ])
+    setDashboard(nextDashboard)
+    setFinance(nextFinance)
+    setFinanceAnalytics(nextFinanceAnalytics)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
-
-    fetch('/api/state', { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('Could not load Goal OS')
-        return response.json()
+    Promise.all([
+      api('/dashboard', { signal: controller.signal }),
+      api('/budget/summary', { signal: controller.signal }),
+      api('/budget/analytics?period=month', { signal: controller.signal }),
+    ])
+      .then(([nextDashboard, nextFinance, nextFinanceAnalytics]) => {
+        setDashboard(nextDashboard)
+        setFinance(nextFinance)
+        setFinanceAnalytics(nextFinanceAnalytics)
       })
-      .then(setState)
       .catch((requestError) => {
         if (requestError.name !== 'AbortError') setError(requestError.message)
       })
-
     return () => controller.abort()
   }, [])
 
-  async function completeHabit(habitId) {
-    const response = await fetch(`/api/habits/${habitId}/complete`, { method: 'POST' })
-    if (!response.ok) return
-    setState(await response.json())
+  const refreshActivity = useCallback(async () => {
+    setDashboard(await api('/dashboard'))
+  }, [])
+
+  async function completeHabit(id) {
+    try {
+      await api(`/habits/${id}/completions`, { method: 'POST' })
+      await refreshActivity()
+    } catch (requestError) {
+      if (requestError.status !== 409) setError(requestError.message)
+    }
   }
 
-  const productivity = useMemo(() => {
-    if (!state?.habits.length) return 0
-    const target = state.habits.reduce((total, habit) => total + habit.targetPerDay, 0)
-    const completed = state.habits.reduce(
-      (total, habit) => total + Math.min(habit.completedToday, habit.targetPerDay),
-      0,
-    )
-    return target ? Math.round((completed / target) * 100) : 0
-  }, [state])
+  async function createHabit(payload) {
+    await api('/habits', { method: 'POST', body: payload })
+    await refreshActivity()
+  }
 
-  if (error) return <main className="status-screen">{error}</main>
-  if (!state) return <main className="status-screen">Loading Goal OS...</main>
+  async function deleteHabit(id) {
+    if (!window.confirm('Delete this habit and its completion history?')) return
+    await api(`/habits/${id}`, { method: 'DELETE' })
+    await refreshActivity()
+  }
 
-  const level = Math.floor(state.profile.xp / 100) + 1
-  const xpProgress = state.profile.xp % 100
-  const doneHabits = state.habits.filter((habit) => habit.done).length
+  async function createGoal(payload) {
+    await api('/goals', { method: 'POST', body: payload })
+    await refreshActivity()
+  }
 
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">ID</span>
-          <div>
-            <strong>Goal OS</strong>
-            <small>React conversion</small>
-          </div>
-        </div>
-        <nav>
-          {['dashboard', 'habits', 'identity'].map((view) => (
-            <button
-              className={activeView === view ? 'active' : ''}
-              key={view}
-              onClick={() => setActiveView(view)}
-              type="button"
-            >
-              {view[0].toUpperCase() + view.slice(1)}
-            </button>
-          ))}
-        </nav>
-      </aside>
+  async function progressGoal(id) {
+    try {
+      await api(`/goals/${id}/progress`, { method: 'POST', body: { amount: 1 } })
+      await refreshActivity()
+    } catch (requestError) {
+      if (requestError.status !== 409) setError(requestError.message)
+    }
+  }
 
-      <main className="content">
-        {activeView === 'dashboard' && (
-          <>
-            <header className="identity-band">
-              <div>
-                <span>Current identity</span>
-                <h1>{state.profile.identity}</h1>
-              </div>
-              <div className="level">
-                <strong>Level {level}</strong>
-                <span>{state.profile.xp} XP</span>
-                <div className="track"><i style={{ width: `${xpProgress}%` }} /></div>
-              </div>
-            </header>
+  async function deleteGoal(id) {
+    if (!window.confirm('Delete this goal and its progress history?')) return
+    await api(`/goals/${id}`, { method: 'DELETE' })
+    await refreshActivity()
+  }
 
-            <section className="stats">
-              <article><span>Productive today</span><strong>{productivity}%</strong></article>
-              <article><span>Habits</span><strong>{doneHabits}/{state.habits.length}</strong></article>
-              <article><span>Goals</span><strong>{state.goals.length}</strong></article>
-            </section>
+  async function saveProfile(payload) {
+    await api('/profile', { method: 'PATCH', body: payload })
+    await refreshActivity()
+  }
 
-            <section className="panel">
-              <div className="panel-heading">
-                <div><h2>Today&apos;s habits</h2><p>Small votes for your identity.</p></div>
-                <button type="button" onClick={() => setActiveView('habits')}>View all</button>
-              </div>
-              <div className="habit-list">
-                {state.habits.slice(0, 4).map((habit) => (
-                  <HabitRow habit={habit} key={habit.id} onComplete={completeHabit} />
-                ))}
-              </div>
-            </section>
-          </>
-        )}
+  async function resetLogs() {
+    if (!window.confirm('Reset XP, completions, evidence, and goal progress? Your configured habits and goals stay.')) return
+    setDashboard(await api('/reset-logs', { method: 'POST' }))
+  }
 
-        {activeView === 'habits' && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div><h1>Healthy Habits</h1><p>Daily actions grouped by time.</p></div>
-            </div>
-            <div className="habit-board">
-              {cueOrder.map((cue) => (
-                <section className="habit-column" key={cue}>
-                  <h2>{cue[0].toUpperCase() + cue.slice(1)}</h2>
-                  {state.habits
-                    .filter((habit) => habit.cue === cue || (cue === 'night' && habit.cue === 'evening'))
-                    .map((habit) => (
-                      <HabitRow habit={habit} key={habit.id} onComplete={completeHabit} />
-                    ))}
-                </section>
-              ))}
-            </div>
-          </section>
-        )}
+  const updateFinance = useCallback((nextFinance) => setFinance(nextFinance), [])
 
-        {activeView === 'identity' && (
-          <section className="panel identity-editor">
-            <span>Identity setup migration is next</span>
-            <h1>{state.profile.identity}</h1>
-            <p>The backend already stores this profile. The edit form will move over in the next pass.</p>
-          </section>
-        )}
+  if (error && !dashboard) {
+    return (
+      <main className="status-screen">
+        <strong>Goal OS could not load.</strong>
+        <span>{error}</span>
+        <button onClick={() => window.location.reload()} type="button">Try again</button>
       </main>
-    </div>
-  )
-}
+    )
+  }
+  if (!dashboard || !finance || !financeAnalytics) {
+    return <main className="status-screen">Loading Goal OS...</main>
+  }
 
-function HabitRow({ habit, onComplete }) {
   return (
-    <article className={`habit-row ${habit.done ? 'done' : ''}`}>
-      <button disabled={habit.done} onClick={() => onComplete(habit.id)} type="button">
-        {habit.done ? 'OK' : '+'}
-      </button>
-      <div>
-        <strong>{habit.name}</strong>
-        <span>{habit.completedToday}/{habit.targetPerDay} today, {habit.xp} XP</span>
-      </div>
-    </article>
+    <AppShell
+      activeView={activeView}
+      onNavigate={setActiveView}
+      onReset={resetLogs}
+    >
+      <LegacyImport onImported={loadEverything} />
+      {error && <button className="error-banner" onClick={() => setError('')} type="button">{error} · dismiss</button>}
+      {activeView === 'dashboard' && (
+        <DashboardView
+          dashboard={dashboard}
+          finance={finance}
+          onCompleteHabit={completeHabit}
+          onNavigate={setActiveView}
+          onProgressGoal={progressGoal}
+        />
+      )}
+      {activeView === 'habits' && (
+        <HabitsView
+          habits={dashboard.habits}
+          onComplete={completeHabit}
+          onCreate={createHabit}
+          onDelete={deleteHabit}
+        />
+      )}
+      {activeView === 'goals' && (
+        <GoalsView
+          goals={dashboard.goals}
+          onCreate={createGoal}
+          onDelete={deleteGoal}
+          onProgress={progressGoal}
+        />
+      )}
+      {activeView === 'budget' && (
+        <Suspense fallback={<section className="panel">Loading budget...</section>}>
+          <BudgetView initialSummary={finance} onFinanceChanged={updateFinance} />
+        </Suspense>
+      )}
+      {activeView === 'analytics' && (
+        <Suspense fallback={<section className="panel">Loading analytics...</section>}>
+          <AnalyticsView dashboard={dashboard} financeAnalytics={financeAnalytics} />
+        </Suspense>
+      )}
+      {activeView === 'identity' && (
+        <IdentityView profile={dashboard.profile} onSave={saveProfile} />
+      )}
+    </AppShell>
   )
 }
 

@@ -156,3 +156,32 @@ test('current and projected 50/30/20 summaries include the correct entries', asy
     assert.equal(projected.wants, 50000)
   })
 })
+
+test('analytics returns fourteen days of ledger-backed sparkline values', async () => {
+  await withApi(async ({ request }) => {
+    await create(request, {
+      type: 'income', account: 'cash', amountCentavos: 300000, note: 'Money',
+      transactionOn: '2026-06-01',
+    })
+    await create(request, {
+      type: 'expense', account: 'cash', status: 'paid', category: 'needs',
+      amountCentavos: 50000, note: 'Supplies', transactionOn: '2026-06-05',
+    })
+
+    const analytics = (await request('/budget/analytics?period=month')).body
+    assert.equal(analytics.sparklines.length, 14)
+    assert.deepEqual(
+      analytics.sparklines.at(-1),
+      {
+        date: '2026-06-06',
+        cash: 250000,
+        bank: 0,
+        savings: 0,
+        spent: 50000,
+        pending: 0,
+        currentMoney: 250000,
+        totalTracked: 300000,
+      },
+    )
+  })
+})
