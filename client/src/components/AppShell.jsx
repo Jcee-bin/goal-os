@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CalendarDays,
   CheckSquare,
   CircleUserRound,
   LayoutDashboard,
@@ -10,6 +11,7 @@ import {
 
 const items = [
   ['dashboard', 'Dashboard', LayoutDashboard],
+  ['today', 'Today', CalendarDays],
   ['habits', 'Habits', CheckSquare],
   ['goals', 'Goals', ListChecks],
   ['budget', 'Budget', WalletCards],

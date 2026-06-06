@@ -1,8 +1,8 @@
 # Goal OS
 
 Goal OS is a local-first personal operating system that combines identity-based
-habits, action goals, XP/evidence, analytics, a focus timer, and a complete
-budget ledger.
+habits, action goals, one-off daily tasks, XP/evidence, analytics, a focus
+timer, and a complete budget ledger.
 
 ## Run Locally
 
@@ -40,6 +40,33 @@ The server owns validation, XP awards, evidence, weekly rollover, balances,
 bulk financial actions, and analytics. The browser stores only temporary UI
 state plus the focus timer's local countdown preferences.
 
+## Tasks and Daily Schedule
+
+The **Today** workspace supports Inbox, Overdue, Anytime, timed blocks, and
+completed tasks. Tasks use Personal, School, Business, or Health areas and
+Low, Normal, or High priority. They remain separate from habits and do not
+award XP.
+
+## Google Calendar
+
+Goal OS can publish selected timed tasks to a dedicated **Goal OS** Google
+Calendar. Goal OS remains the source of truth; edits made directly in Google
+Calendar are not imported.
+
+1. Create a Google Cloud project and enable the Google Calendar API.
+2. Configure the OAuth consent screen.
+3. Create an OAuth client with application type **Web application**.
+4. Add this authorized redirect URI:
+   `http://localhost:8787/api/integrations/google/callback`
+5. Copy `server/.env.example` to `server/.env` and fill in the client ID,
+   client secret, and a long random `TOKEN_ENCRYPTION_KEY`.
+6. Set `CLIENT_ORIGIN` to the actual Vite URL. Use
+   `http://localhost:5174` when port 5173 is occupied.
+7. Restart `npm run dev`, open **Today**, and press **Connect**.
+
+Refresh tokens are encrypted before SQLite storage. Calendar failures never
+discard local task changes; failed task syncs can be retried from Today.
+
 ## Legacy Data
 
 1. Open the original `goal-os.html`.
@@ -49,7 +76,8 @@ state plus the focus timer's local countdown preferences.
    `goal-os-legacy-export.json`.
 
 Import is intentionally allowed once. It replaces starter content and preserves
-habits, completions, goals, XP, evidence, and budget transactions.
+habits, completions, goals, XP, evidence, and budget transactions. Tasks created
+in the React app are unaffected.
 
 ## Local Backup
 

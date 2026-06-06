@@ -6,6 +6,8 @@ export const accounts = new Set(['cash', 'bank', 'savings'])
 export const transactionTypes = new Set(['income', 'expense', 'saving'])
 export const transactionStatuses = new Set(['paid', 'to-pay'])
 export const categories = new Set(['income', 'needs', 'wants', 'debt', 'saving'])
+export const taskAreas = new Set(['personal', 'school', 'business', 'health'])
+export const taskPriorities = new Set(['low', 'normal', 'high'])
 
 export function getDateKey(date = new Date()) {
   const year = date.getFullYear()

@@ -15,6 +15,7 @@ export default function DashboardView({
   onCompleteHabit,
   onNavigate,
   onProgressGoal,
+  tasks,
 }) {
   const [tipIndex, setTipIndex] = useState(0)
   const { profile, habits, goals, evidence, analytics } = dashboard
@@ -47,6 +48,23 @@ export default function DashboardView({
 
       <section className="dashboard-grid">
         <aside className="dashboard-rail">
+          <section className="panel compact-panel">
+            <div className="section-heading"><h2>Schedule</h2><span>{tasks.timed.length + tasks.anytime.length} today</span></div>
+            <div className="schedule-preview">
+              {tasks.overdue.length > 0 && <strong className="overdue-count">{tasks.overdue.length} overdue</strong>}
+              {[...tasks.timed, ...tasks.anytime].slice(0, 3).map((task) => (
+                <article key={task.id}>
+                  <time>{task.startTime ? formatDashboardTime(task.startTime) : 'Anytime'}</time>
+                  <span>{task.title}</span>
+                </article>
+              ))}
+              {tasks.timed.length + tasks.anytime.length === 0 && <p className="empty">No tasks scheduled yet.</p>}
+            </div>
+            <button className="wide-secondary" onClick={() => onNavigate('today')} type="button">
+              Open today
+            </button>
+          </section>
+
           <section className="panel compact-panel">
             <div className="section-heading"><h2>Today</h2><span>{dashboard.today}</span></div>
             <div className="today-stats">
@@ -163,4 +181,10 @@ export default function DashboardView({
       </section>
     </>
   )
+}
+
+function formatDashboardTime(time) {
+  const [hour, minute] = time.split(':').map(Number)
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
+    .format(new Date(2026, 0, 1, hour, minute))
 }

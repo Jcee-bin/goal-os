@@ -94,6 +94,55 @@ create table public.transactions (
 create index transactions_user_date_idx
   on public.transactions(user_id, transaction_on, created_at);
 
+create table public.tasks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  notes text not null default '',
+  area text not null default 'personal'
+    check (area in ('personal','school','business','health')),
+  priority text not null default 'normal'
+    check (priority in ('low','normal','high')),
+  scheduled_on date,
+  start_time time,
+  end_time time,
+  status text not null default 'open' check (status in ('open','completed')),
+  calendar_enabled boolean not null default false,
+  calendar_event_id text,
+  sync_status text not null default 'local'
+    check (sync_status in ('local','pending','synced','failed')),
+  sync_error text,
+  completed_on date,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index tasks_user_schedule_idx
+  on public.tasks(user_id, status, scheduled_on, start_time, created_at);
+
+create table public.google_integrations (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  refresh_token_encrypted text,
+  calendar_id text,
+  connected_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table public.google_oauth_states (
+  state text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  expires_at timestamptz not null
+);
+
+create table public.calendar_outbox (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_id text not null,
+  operation text not null check (operation in ('delete')),
+  last_error text,
+  created_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.habits enable row level security;
 alter table public.habit_completions enable row level security;
@@ -102,6 +151,10 @@ alter table public.goal_progress_events enable row level security;
 alter table public.evidence_entries enable row level security;
 alter table public.xp_events enable row level security;
 alter table public.transactions enable row level security;
+alter table public.tasks enable row level security;
+alter table public.google_integrations enable row level security;
+alter table public.google_oauth_states enable row level security;
+alter table public.calendar_outbox enable row level security;
 
 do $$
 declare
@@ -109,7 +162,8 @@ declare
 begin
   foreach table_name in array array[
     'profiles', 'habits', 'habit_completions', 'goals',
-    'goal_progress_events', 'evidence_entries', 'xp_events', 'transactions'
+    'goal_progress_events', 'evidence_entries', 'xp_events', 'transactions',
+    'tasks'
   ]
   loop
     execute format(

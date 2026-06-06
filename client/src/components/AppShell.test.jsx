@@ -12,6 +12,7 @@ describe('AppShell', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: 'Today' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Budget' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Analytics' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Habits' }))

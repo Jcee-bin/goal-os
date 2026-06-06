@@ -22,6 +22,23 @@ Verified: 2026-06-06
 Evidence: `server/test/activity.test.js`, React component tests, desktop and
 390px Chromium screenshots.
 
+## Tasks and Schedule
+
+- [x] Inbox, Overdue, Anytime, Timeline, and Completed task sections are present.
+- [x] One-off tasks support areas, priorities, notes, dates, time blocks, edit,
+  complete, reopen, reschedule, and delete.
+- [x] Overlapping time blocks are allowed with a visible warning.
+- [x] Tasks do not award XP.
+- [x] Dashboard includes a compact schedule preview.
+- [x] Selected timed tasks can publish one-way to a dedicated Google Calendar.
+- [x] Refresh tokens are encrypted, sync failures preserve local changes, and
+  failed task syncs can be retried.
+- [x] Completion, reopening, missing-event recreation, disconnect, and queued
+  offline deletion are covered by integration tests.
+
+Evidence: `server/test/tasks.test.js`, `server/test/googleCalendar.test.js`,
+`TodayView.test.jsx`, and live desktop/mobile browser verification.
+
 ## Budget
 
 - [x] Income can be assigned to cash, bank, or savings.

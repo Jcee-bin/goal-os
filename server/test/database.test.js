@@ -14,12 +14,16 @@ test('creates the complete local schema and seeded user', () => {
   `).all().map(({ name }) => name)
 
   assert.deepEqual(tableNames, [
+    'calendar_outbox',
     'evidence_entries',
     'goal_progress_events',
     'goals',
+    'google_integrations',
+    'google_oauth_states',
     'habit_completions',
     'habits',
     'profiles',
+    'tasks',
     'transactions',
     'users',
     'xp_events',

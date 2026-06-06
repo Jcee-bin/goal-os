@@ -120,6 +120,57 @@ const schema = `
 
   CREATE INDEX IF NOT EXISTS transactions_user_date_idx
     ON transactions(user_id, transaction_on, created_at);
+
+  CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    area TEXT NOT NULL DEFAULT 'personal',
+    priority TEXT NOT NULL DEFAULT 'normal',
+    scheduled_on TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    calendar_enabled INTEGER NOT NULL DEFAULT 0,
+    calendar_event_id TEXT,
+    sync_status TEXT NOT NULL DEFAULT 'local',
+    sync_error TEXT,
+    completed_on TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS tasks_user_schedule_idx
+    ON tasks(user_id, status, scheduled_on, start_time, created_at);
+
+  CREATE TABLE IF NOT EXISTS google_integrations (
+    user_id TEXT PRIMARY KEY,
+    refresh_token_encrypted TEXT,
+    calendar_id TEXT,
+    connected_at TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS google_oauth_states (
+    state TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS calendar_outbox (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `
 
 export function createDatabase({ filename = ':memory:', seed = true } = {}) {
@@ -127,8 +178,16 @@ export function createDatabase({ filename = ':memory:', seed = true } = {}) {
   const db = new DatabaseSync(filename)
   rebuildPrototypeSchemaIfNeeded(db)
   db.exec(schema)
+  migrateCurrentSchema(db)
   if (seed) seedLocalUser(db)
   return db
+}
+
+function migrateCurrentSchema(db) {
+  const taskColumns = db.prepare('PRAGMA table_info(tasks)').all().map(({ name }) => name)
+  if (!taskColumns.includes('completed_on')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN completed_on TEXT')
+  }
 }
 
 function rebuildPrototypeSchemaIfNeeded(db) {
