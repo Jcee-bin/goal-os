@@ -5,12 +5,16 @@ import { createActivityRouter } from './routes/activityRoutes.js'
 import { createFinanceRouter } from './routes/financeRoutes.js'
 import { createImportRouter } from './routes/importRoutes.js'
 import { createGoogleIntegrationRouter } from './routes/googleIntegrationRoutes.js'
+import { createJarvisRouter } from './routes/jarvisRoutes.js'
+import { createSleepRouter } from './routes/sleepRoutes.js'
 import { createTaskRouter } from './routes/taskRoutes.js'
 import { createActivityService } from './services/activityService.js'
 import { createGoogleCalendarClient } from './services/googleCalendarClient.js'
 import { createGoogleIntegrationService } from './services/googleIntegrationService.js'
 import { createFinanceService } from './services/financeService.js'
 import { createImportService } from './services/importService.js'
+import { createJarvisService } from './services/jarvisService.js'
+import { createSleepService } from './services/sleepService.js'
 import { createTaskService } from './services/taskService.js'
 
 export function createApp({
@@ -18,6 +22,7 @@ export function createApp({
   now,
   googleClient,
   googleConfig = {},
+  groqApiKey,
 }) {
   if (!db) throw new Error('createApp requires a database')
 
@@ -25,6 +30,11 @@ export function createApp({
   app.locals.db = db
   app.use(cors())
   app.use(express.json({ limit: '1mb' }))
+  app.use((_request, response, next) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    response.setHeader('X-Frame-Options', 'DENY')
+    next()
+  })
 
   app.get('/api/health', (_request, response) => {
     response.json({ ok: true })
@@ -55,10 +65,23 @@ export function createApp({
     calendarService: googleService,
     now,
   })
+  const sleepService = createSleepService({ db, userId: LOCAL_USER_ID, now })
+
+  const jarvisService = createJarvisService({
+    apiKey: groqApiKey,
+    activityService,
+    taskService,
+    financeService,
+    sleepService,
+    now,
+  })
+
   app.use('/api', createActivityRouter(activityService))
   app.use('/api', createFinanceRouter(financeService))
   app.use('/api', createImportRouter(importService))
   app.use('/api', createTaskRouter(taskService))
+  app.use('/api', createSleepRouter(sleepService))
+  app.use('/api', createJarvisRouter(jarvisService))
   app.use(
     '/api',
     createGoogleIntegrationRouter(googleService, resolvedGoogleConfig.clientOrigin),
@@ -72,5 +95,5 @@ export function createApp({
     })
   })
 
-  return app
+  return { app, googleService }
 }

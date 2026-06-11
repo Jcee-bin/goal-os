@@ -43,7 +43,7 @@ export function createTaskRepository(db) {
           id, user_id, title, notes, area, priority, scheduled_on,
           start_time, end_time, status, calendar_enabled, calendar_event_id,
           sync_status, sync_error, completed_on, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, NULL, ?, NULL, NULL, NULL, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, NULL, NULL, NULL, ?, ?)
       `).run(
         task.id,
         userId,
@@ -55,6 +55,7 @@ export function createTaskRepository(db) {
         task.startTime,
         task.endTime,
         task.calendarEnabled ? 1 : 0,
+        task.calendarEventId ?? null,
         task.syncStatus,
         task.createdAt,
         task.updatedAt,
@@ -106,6 +107,32 @@ export function createTaskRepository(db) {
         SET calendar_event_id = ?, sync_status = ?, sync_error = ?, updated_at = ?
         WHERE user_id = ? AND id = ?
       `).run(eventId ?? null, syncStatus, syncError ?? null, new Date().toISOString(), userId, id)
+      return this.get(userId, id)
+    },
+
+    getByCalendarEventId(userId, calendarEventId) {
+      return mapTask(
+        db.prepare(`${select} WHERE user_id = ? AND calendar_event_id = ?`).get(userId, calendarEventId),
+      )
+    },
+
+    applyInboundSync(userId, id, { title, notes, scheduledOn, startTime, endTime, updatedAt }) {
+      db.prepare(`
+        UPDATE tasks
+        SET title = ?, notes = ?, scheduled_on = ?, start_time = ?, end_time = ?,
+            sync_status = 'synced', sync_error = NULL, updated_at = ?
+        WHERE user_id = ? AND id = ?
+      `).run(title, notes, scheduledOn, startTime, endTime, updatedAt, userId, id)
+      return this.get(userId, id)
+    },
+
+    unlinkCalendar(userId, id, updatedAt) {
+      db.prepare(`
+        UPDATE tasks
+        SET calendar_event_id = NULL, calendar_enabled = 0,
+            sync_status = 'local', sync_error = NULL, updated_at = ?
+        WHERE user_id = ? AND id = ?
+      `).run(updatedAt, userId, id)
       return this.get(userId, id)
     },
 

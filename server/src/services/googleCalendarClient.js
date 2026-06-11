@@ -2,15 +2,21 @@ const calendarApi = 'https://www.googleapis.com/calendar/v3'
 
 export function createGoogleCalendarClient(config) {
   async function googleFetch(url, options = {}) {
-    const response = await fetch(url, options)
-    if (response.status === 204) return null
-    const body = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      const error = new Error(body.error?.message || 'Google Calendar request failed')
-      error.status = response.status
-      throw error
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal })
+      if (response.status === 204) return null
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const error = new Error(body.error?.message || 'Google Calendar request failed')
+        error.status = response.status
+        throw error
+      }
+      return body
+    } finally {
+      clearTimeout(timeout)
     }
-    return body
   }
 
   return {
@@ -102,6 +108,16 @@ export function createGoogleCalendarClient(config) {
       } catch (error) {
         if (error.status !== 404 && error.status !== 410) throw error
       }
+    },
+
+    async listEvents({ accessToken, calendarId, updatedMin, pageToken }) {
+      const params = new URLSearchParams({ singleEvents: 'true', showDeleted: 'true' })
+      if (updatedMin) params.set('updatedMin', updatedMin)
+      if (pageToken) params.set('pageToken', pageToken)
+      return googleFetch(
+        `${calendarApi}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+        { headers: { authorization: `Bearer ${accessToken}` } },
+      )
     },
   }
 }

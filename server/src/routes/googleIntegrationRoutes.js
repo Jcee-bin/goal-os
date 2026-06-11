@@ -10,11 +10,22 @@ export function createGoogleIntegrationRouter(service, clientOrigin) {
     response.json(service.connect())
   })
   router.get('/integrations/google/callback', async (request, response) => {
-    await service.callback(request.query)
-    response.redirect(`${clientOrigin}/?google=connected`)
+    try {
+      await service.callback(request.query)
+      response.redirect(`${clientOrigin}/?google=connected`)
+    } catch {
+      response.redirect(`${clientOrigin}/?google=error`)
+    }
   })
   router.post('/integrations/google/disconnect', (_request, response) => {
     response.json(service.disconnect())
+  })
+  router.post('/integrations/google/sync', async (_request, response, next) => {
+    try {
+      response.json(await service.syncNow())
+    } catch (error) {
+      next(error)
+    }
   })
 
   return router

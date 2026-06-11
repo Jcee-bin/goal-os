@@ -22,11 +22,11 @@ export default function AnalyticsView({ dashboard, financeAnalytics }) {
           <div className="section-heading"><h2>Habit votes</h2><span>Last seven days</span></div>
           <ResponsiveContainer height={280} width="100%">
             <BarChart data={habitData}>
-              <CartesianGrid stroke="#e5e7e4" vertical={false} />
-              <XAxis dataKey="label" fontSize={11} />
-              <YAxis allowDecimals={false} fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#0b624b" radius={[5, 5, 0, 0]} />
+              <CartesianGrid stroke="#2d3630" vertical={false} />
+              <XAxis axisLine={false} dataKey="label" fontSize={11} tick={{ fill: '#748a78' }} tickLine={false} />
+              <YAxis allowDecimals={false} axisLine={false} fontSize={11} tick={{ fill: '#748a78' }} tickLine={false} />
+              <Tooltip contentStyle={{ background: '#1d2320', border: '1px solid #2d3630', borderRadius: '5px', color: '#e4ebe5', fontSize: '0.8rem' }} cursor={{ fill: 'rgba(46, 140, 98, 0.07)' }} />
+              <Bar dataKey="count" fill="#2e8c62" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </section>

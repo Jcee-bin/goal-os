@@ -151,6 +151,7 @@ const schema = `
     refresh_token_encrypted TEXT,
     calendar_id TEXT,
     connected_at TEXT,
+    last_polled_at TEXT,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -171,6 +172,22 @@ const schema = `
     created_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS sleep_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    slept_at TEXT NOT NULL,
+    woke_at TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    quality INTEGER NOT NULL DEFAULT 3,
+    notes TEXT NOT NULL DEFAULT '',
+    recorded_on TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS sleep_logs_user_date_idx
+    ON sleep_logs(user_id, recorded_on, created_at);
 `
 
 export function createDatabase({ filename = ':memory:', seed = true } = {}) {
@@ -187,6 +204,14 @@ function migrateCurrentSchema(db) {
   const taskColumns = db.prepare('PRAGMA table_info(tasks)').all().map(({ name }) => name)
   if (!taskColumns.includes('completed_on')) {
     db.exec('ALTER TABLE tasks ADD COLUMN completed_on TEXT')
+  }
+  const googleColumns = db.prepare('PRAGMA table_info(google_integrations)').all().map(({ name }) => name)
+  if (!googleColumns.includes('last_polled_at')) {
+    db.exec('ALTER TABLE google_integrations ADD COLUMN last_polled_at TEXT')
+  }
+  const sleepColumns = db.prepare('PRAGMA table_info(sleep_logs)').all().map(({ name }) => name)
+  if (!sleepColumns.includes('type')) {
+    db.exec("ALTER TABLE sleep_logs ADD COLUMN type TEXT NOT NULL DEFAULT 'night'")
   }
 }
 

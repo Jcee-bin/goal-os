@@ -5,10 +5,8 @@ import { createDatabase } from '../src/database.js'
 
 test('imports legacy Goal OS and budget data exactly once', async () => {
   const db = createDatabase()
-  const server = createApp({
-    db,
-    now: () => new Date(2026, 5, 6, 10, 0, 0),
-  }).listen(0)
+  const { app } = createApp({ db, now: () => new Date(2026, 5, 6, 10, 0, 0) })
+  const server = app.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`
   const request = async (path, options = {}) => {

@@ -5,7 +5,8 @@ import { createDatabase } from '../src/database.js'
 
 async function withApi(run, date = new Date(2026, 5, 6, 9, 0, 0)) {
   const db = createDatabase()
-  const server = createApp({ db, now: () => new Date(date) }).listen(0)
+  const { app } = createApp({ db, now: () => new Date(date) })
+  const server = app.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`
 
@@ -90,7 +91,7 @@ test('goal completion bonus is awarded once', async () => {
 test('weekly goals roll over to a new Monday-based week', async () => {
   let current = new Date(2026, 5, 6, 9, 0, 0)
   const db = createDatabase()
-  const serviceApp = createApp({ db, now: () => new Date(current) })
+  const { app: serviceApp } = createApp({ db, now: () => new Date(current) })
   const server = serviceApp.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`

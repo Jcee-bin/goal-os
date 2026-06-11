@@ -6,6 +6,12 @@ const categoryLabels = {
   debtSaving: 'Debt / saving',
 }
 
+const categoryColors = {
+  needs: '#2e8c62',
+  wants: '#c49020',
+  debtSaving: '#8170d0',
+}
+
 export default function BudgetInsights({ analytics }) {
   const pending = Object.fromEntries(
     Object.keys(categoryLabels).map((key) => [
@@ -25,7 +31,7 @@ export default function BudgetInsights({ analytics }) {
           {Object.entries(pending).map(([key, value]) => (
             <div key={key}>
               <span>{categoryLabels[key]}</span>
-              <div className="track"><i style={{ width: `${(value / maximum) * 100}%` }} /></div>
+              <div className="track"><i style={{ width: `${(value / maximum) * 100}%`, background: categoryColors[key] }} /></div>
               <strong>{money.format(value / 100)}</strong>
             </div>
           ))}

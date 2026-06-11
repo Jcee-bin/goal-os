@@ -125,6 +125,7 @@ create table public.google_integrations (
   refresh_token_encrypted text,
   calendar_id text,
   connected_at timestamptz,
+  last_polled_at timestamptz,
   updated_at timestamptz not null default now()
 );
 

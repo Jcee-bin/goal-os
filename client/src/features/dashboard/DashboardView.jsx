@@ -1,6 +1,7 @@
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { money } from '../../api/client'
+import TodayBrief from './TodayBrief'
 
 const tips = [
   ['Make it obvious', 'Put the cue where your eyes already go. Shoes by the door, book on the desk, water beside the bed.'],
@@ -31,6 +32,7 @@ export default function DashboardView({
 
   return (
     <>
+      <TodayBrief dashboard={dashboard} finance={finance} tasks={tasks} />
       <header className="identity-band">
         <div>
           <span className="eyebrow">Current identity</span>
@@ -105,6 +107,7 @@ export default function DashboardView({
               ))}
             </div>
           </section>
+
         </aside>
 
         <div className="dashboard-main">

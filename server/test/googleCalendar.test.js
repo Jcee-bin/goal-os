@@ -7,10 +7,12 @@ function fakeGoogle() {
   const calls = []
   let failNext = false
   let missingNext = false
+  let inboundEvents = []
   return {
     calls,
     fail() { failNext = true },
     missing() { missingNext = true },
+    setInboundEvents(events) { inboundEvents = events },
     authorizationUrl({ state }) {
       return `https://accounts.example/authorize?state=${state}`
     },
@@ -41,13 +43,17 @@ function fakeGoogle() {
     async deleteEvent({ eventId }) {
       calls.push(['delete', eventId])
     },
+    async listEvents() {
+      calls.push(['listEvents'])
+      return { items: inboundEvents }
+    },
   }
 }
 
 async function withApi(run) {
   const db = createDatabase()
   const googleClient = fakeGoogle()
-  const server = createApp({
+  const { app } = createApp({
     db,
     now: () => new Date('2026-06-06T08:00:00+08:00'),
     googleClient,
@@ -59,7 +65,8 @@ async function withApi(run) {
       clientOrigin: 'http://localhost:5173',
       timeZone: 'Asia/Manila',
     },
-  }).listen(0)
+  })
+  const server = app.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`
 
@@ -170,6 +177,155 @@ test('disconnects without deleting the Goal OS calendar', async () => {
     assert.equal(disconnected.body.connected, false)
     assert.equal(disconnected.body.calendarId, 'goal-os-calendar')
     assert.equal(googleClient.calls.some(([name]) => name === 'delete-calendar'), false)
+  })
+})
+
+test('pollInbound returns early and does nothing when not connected', async () => {
+  await withApi(async ({ request }) => {
+    const result = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(result.status, 200)
+    assert.equal(result.body.processed, 0)
+    assert.equal(result.body.imported, 0)
+  })
+})
+
+test('pollInbound applies update when Google event is newer than task', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+    const task = (await request('/tasks', { method: 'POST', body: timedTask })).body
+    assert.equal(task.syncStatus, 'synced')
+
+    googleClient.setInboundEvents([{
+      id: task.calendarEventId,
+      status: 'confirmed',
+      summary: 'Updated by Google',
+      description: 'new notes',
+      start: { dateTime: '2026-06-06T20:00:00+08:00' },
+      end: { dateTime: '2026-06-06T21:00:00+08:00' },
+      updated: new Date(Date.now() + 10_000).toISOString(),
+    }])
+    const sync = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(sync.body.processed, 1)
+
+    const updated = (await request('/tasks?date=2026-06-06')).body.timed[0]
+    assert.equal(updated.title, 'Updated by Google')
+    assert.equal(updated.startTime, '20:00')
+  })
+})
+
+test('pollInbound skips update when task was modified more recently than Google event', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+    const task = (await request('/tasks', { method: 'POST', body: timedTask })).body
+
+    googleClient.setInboundEvents([{
+      id: task.calendarEventId,
+      status: 'confirmed',
+      summary: 'Stale Google title',
+      description: '',
+      start: { dateTime: '2026-06-06T19:00:00+08:00' },
+      end: { dateTime: '2026-06-06T20:00:00+08:00' },
+      updated: new Date(Date.now() - 10_000).toISOString(),
+    }])
+    await request('/integrations/google/sync', { method: 'POST' })
+
+    const tasks = (await request('/tasks?date=2026-06-06')).body.timed
+    assert.equal(tasks[0].title, 'Study for exam')
+  })
+})
+
+test('pollInbound unlinks a Goal OS task when its Google event is cancelled', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+    const task = (await request('/tasks', { method: 'POST', body: timedTask })).body
+
+    googleClient.setInboundEvents([{
+      id: task.calendarEventId,
+      status: 'cancelled',
+      start: { dateTime: '2026-06-06T19:00:00+08:00' },
+      end: { dateTime: '2026-06-06T20:00:00+08:00' },
+      updated: new Date(Date.now() + 10_000).toISOString(),
+    }])
+    const sync = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(sync.body.processed, 1)
+
+    const tasks = (await request('/tasks?date=2026-06-06')).body
+    const found = [...tasks.timed, ...tasks.anytime, ...tasks.inbox].find((t) => t.id === task.id)
+    assert.equal(found.calendarEventId, null)
+    assert.equal(found.calendarEnabled, false)
+  })
+})
+
+test('pollInbound imports arbitrary Google Calendar events as tasks', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+
+    googleClient.setInboundEvents([{
+      id: 'external-event-1',
+      status: 'confirmed',
+      summary: 'Doctor appointment',
+      description: 'Bring ID',
+      start: { dateTime: '2026-06-06T10:00:00+08:00' },
+      end: { dateTime: '2026-06-06T11:00:00+08:00' },
+      updated: new Date(Date.now() + 5_000).toISOString(),
+    }])
+    const sync = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(sync.body.imported, 1)
+
+    const tasks = (await request('/tasks?date=2026-06-06')).body.timed
+    const imported = tasks.find((t) => t.calendarEventId === 'external-event-1')
+    assert.ok(imported)
+    assert.equal(imported.title, 'Doctor appointment')
+    assert.equal(imported.startTime, '10:00')
+    assert.equal(imported.calendarEnabled, true)
+    assert.equal(imported.syncStatus, 'synced')
+  })
+})
+
+test('pollInbound skips all-day events (no start.dateTime)', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+
+    googleClient.setInboundEvents([{
+      id: 'all-day-event',
+      status: 'confirmed',
+      summary: 'Birthday',
+      start: { date: '2026-06-06' },
+      end: { date: '2026-06-07' },
+      updated: new Date(Date.now() + 5_000).toISOString(),
+    }])
+    const sync = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(sync.body.imported, 0)
+    assert.equal(sync.body.processed, 0)
+  })
+})
+
+test('pollInbound skips cancelled events with no matching task', async () => {
+  await withApi(async ({ request, googleClient }) => {
+    await connect(request)
+
+    googleClient.setInboundEvents([{
+      id: 'ghost-event',
+      status: 'cancelled',
+      start: { dateTime: '2026-06-06T10:00:00+08:00' },
+      end: { dateTime: '2026-06-06T11:00:00+08:00' },
+      updated: new Date().toISOString(),
+    }])
+    const sync = await request('/integrations/google/sync', { method: 'POST' })
+    assert.equal(sync.body.imported, 0)
+    assert.equal(sync.body.processed, 0)
+  })
+})
+
+test('pollInbound updates lastPolledAt even when no events match', async () => {
+  await withApi(async ({ request }) => {
+    await connect(request)
+    const before = (await request('/integrations/google/status')).body
+    assert.equal(before.lastPolledAt, null)
+
+    await request('/integrations/google/sync', { method: 'POST' })
+    const after = (await request('/integrations/google/status')).body
+    assert.ok(after.lastPolledAt)
   })
 })
 

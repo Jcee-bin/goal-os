@@ -6,7 +6,8 @@ import { createDatabase } from '../src/database.js'
 async function withApi(run) {
   const db = createDatabase()
   const now = new Date('2026-06-06T08:00:00+08:00')
-  const server = createApp({ db, now: () => new Date(now) }).listen(0)
+  const { app } = createApp({ db, now: () => new Date(now) })
+  const server = app.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`
 

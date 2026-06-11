@@ -6,8 +6,9 @@ import { createDatabase } from './database.js'
 const here = dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.PORT || 8787)
 const db = createDatabase({ filename: resolve(here, '..', 'data', 'goal-os.sqlite') })
-const app = createApp({
+const { app, googleService } = createApp({
   db,
+  groqApiKey: process.env.GROQ_API_KEY,
   googleConfig: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -21,3 +22,12 @@ const app = createApp({
 app.listen(port, () => {
   console.log(`Goal OS API listening on http://localhost:${port}`)
 })
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000
+setInterval(async () => {
+  try {
+    await googleService.pollInbound()
+  } catch (error) {
+    console.error('[Google Calendar] Poll failed:', error.message)
+  }
+}, POLL_INTERVAL_MS)

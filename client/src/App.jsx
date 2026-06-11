@@ -7,6 +7,8 @@ import GoalsView from './features/goals/GoalsView'
 import HabitsView from './features/habits/HabitsView'
 import IdentityView from './features/identity/IdentityView'
 import LegacyImport from './features/import/LegacyImport'
+import JarvisOverlay from './features/jarvis/JarvisOverlay'
+import SleepView from './features/sleep/SleepView'
 import TodayView from './features/tasks/TodayView'
 
 const AnalyticsView = lazy(() => import('./features/analytics/AnalyticsView'))
@@ -14,6 +16,7 @@ const BudgetView = lazy(() => import('./features/budget/BudgetView'))
 
 function App() {
   const [activeView, setActiveView] = useState('dashboard')
+  const [jarvisOpen, setJarvisOpen] = useState(false)
   const [dashboard, setDashboard] = useState(null)
   const [finance, setFinance] = useState(null)
   const [financeAnalytics, setFinanceAnalytics] = useState(null)
@@ -22,16 +25,20 @@ function App() {
   const [tasks, setTasks] = useState(null)
   const [todayTasks, setTodayTasks] = useState(null)
   const [googleStatus, setGoogleStatus] = useState(null)
+  const [sleep, setSleep] = useState(null)
+  const [sleepAnalytics, setSleepAnalytics] = useState(null)
 
   const loadEverything = useCallback(async () => {
     const currentDate = todayKey()
-    const [nextDashboard, nextFinance, nextFinanceAnalytics, nextTasks, nextTodayTasks, nextGoogleStatus] = await Promise.all([
+    const [nextDashboard, nextFinance, nextFinanceAnalytics, nextTasks, nextTodayTasks, nextGoogleStatus, nextSleep, nextSleepAnalytics] = await Promise.all([
       api('/dashboard'),
       api('/budget/summary'),
       api('/budget/analytics?period=month'),
       api(`/tasks?date=${taskDate}`),
       api(`/tasks?date=${currentDate}`),
       api('/integrations/google/status'),
+      api('/sleep'),
+      api('/sleep/analytics'),
     ])
     setDashboard(nextDashboard)
     setFinance(nextFinance)
@@ -39,6 +46,8 @@ function App() {
     setTasks(nextTasks)
     setTodayTasks(nextTodayTasks)
     setGoogleStatus(nextGoogleStatus)
+    setSleep(nextSleep)
+    setSleepAnalytics(nextSleepAnalytics)
   }, [taskDate])
 
   useEffect(() => {
@@ -51,20 +60,34 @@ function App() {
       api(`/tasks?date=${taskDate}`, { signal: controller.signal }),
       api(`/tasks?date=${currentDate}`, { signal: controller.signal }),
       api('/integrations/google/status', { signal: controller.signal }),
+      api('/sleep', { signal: controller.signal }),
+      api('/sleep/analytics', { signal: controller.signal }),
     ])
-      .then(([nextDashboard, nextFinance, nextFinanceAnalytics, nextTasks, nextTodayTasks, nextGoogleStatus]) => {
+      .then(([nextDashboard, nextFinance, nextFinanceAnalytics, nextTasks, nextTodayTasks, nextGoogleStatus, nextSleep, nextSleepAnalytics]) => {
         setDashboard(nextDashboard)
         setFinance(nextFinance)
         setFinanceAnalytics(nextFinanceAnalytics)
         setTasks(nextTasks)
         setTodayTasks(nextTodayTasks)
         setGoogleStatus(nextGoogleStatus)
+        setSleep(nextSleep)
+        setSleepAnalytics(nextSleepAnalytics)
       })
       .catch((requestError) => {
         if (requestError.name !== 'AbortError') setError(requestError.message)
       })
     return () => controller.abort()
   }, [taskDate])
+
+  useEffect(() => {
+    if (!error) return undefined
+    const reconnect = setInterval(() => {
+      api('/health')
+        .then(() => setError(''))
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(reconnect)
+  }, [error])
 
   const refreshActivity = useCallback(async () => {
     setDashboard(await api('/dashboard'))
@@ -163,6 +186,33 @@ function App() {
     await refreshTasks()
   }
 
+  async function syncGoogle() {
+    await api('/integrations/google/sync', { method: 'POST' })
+    const [nextGoogleStatus, nextTasks, nextTodayTasks] = await Promise.all([
+      api('/integrations/google/status'),
+      api(`/tasks?date=${taskDate}`),
+      api(`/tasks?date=${todayKey()}`),
+    ])
+    setGoogleStatus(nextGoogleStatus)
+    setTasks(nextTasks)
+    setTodayTasks(nextTodayTasks)
+  }
+
+  async function logSleep(payload) {
+    await api('/sleep', { method: 'POST', body: payload })
+    const [nextSleep, nextSleepAnalytics] = await Promise.all([api('/sleep'), api('/sleep/analytics')])
+    setSleep(nextSleep)
+    setSleepAnalytics(nextSleepAnalytics)
+  }
+
+  async function deleteSleep(id) {
+    if (!window.confirm('Delete this sleep log?')) return
+    await api(`/sleep/${id}`, { method: 'DELETE' })
+    const [nextSleep, nextSleepAnalytics] = await Promise.all([api('/sleep'), api('/sleep/analytics')])
+    setSleep(nextSleep)
+    setSleepAnalytics(nextSleepAnalytics)
+  }
+
   if (error && !dashboard) {
     return (
       <main className="status-screen">
@@ -172,11 +222,12 @@ function App() {
       </main>
     )
   }
-  if (!dashboard || !finance || !financeAnalytics || !tasks || !todayTasks || !googleStatus) {
+  if (!dashboard || !finance || !financeAnalytics || !tasks || !todayTasks || !googleStatus || !sleep || !sleepAnalytics) {
     return <main className="status-screen">Loading Goal OS...</main>
   }
 
   return (
+    <>
     <AppShell
       activeView={activeView}
       onNavigate={setActiveView}
@@ -192,6 +243,7 @@ function App() {
           onCompleteHabit={completeHabit}
           onNavigate={setActiveView}
           onProgressGoal={progressGoal}
+          onRefresh={loadEverything}
         />
       )}
       {activeView === 'today' && (
@@ -206,6 +258,7 @@ function App() {
           onDisconnect={disconnectGoogle}
           onReopen={(id) => taskAction(id, 'reopen')}
           onRetrySync={(id) => taskAction(id, 'retry-sync')}
+          onSync={syncGoogle}
           onUpdate={updateTask}
           tasks={tasks}
         />
@@ -226,6 +279,14 @@ function App() {
           onProgress={progressGoal}
         />
       )}
+      {activeView === 'sleep' && (
+        <SleepView
+          analytics={sleepAnalytics}
+          logs={sleep}
+          onDelete={deleteSleep}
+          onLog={logSleep}
+        />
+      )}
       {activeView === 'budget' && (
         <Suspense fallback={<section className="panel">Loading budget...</section>}>
           <BudgetView initialSummary={finance} onFinanceChanged={updateFinance} />
@@ -240,6 +301,23 @@ function App() {
         <IdentityView profile={dashboard.profile} onSave={saveProfile} />
       )}
     </AppShell>
+
+    <button
+      className={`jarvis-float${jarvisOpen ? ' open' : ''}`}
+      onClick={() => setJarvisOpen((o) => !o)}
+      title="Open Jarvis"
+      type="button"
+    >
+      J
+    </button>
+
+    <JarvisOverlay
+      dashboard={dashboard}
+      onClose={() => setJarvisOpen(false)}
+      onRefresh={loadEverything}
+      open={jarvisOpen}
+    />
+    </>
   )
 }
 

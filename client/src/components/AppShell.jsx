@@ -5,6 +5,7 @@ import {
   CircleUserRound,
   LayoutDashboard,
   ListChecks,
+  Moon,
   RefreshCcw,
   WalletCards,
 } from 'lucide-react'
@@ -14,6 +15,7 @@ const items = [
   ['today', 'Today', CalendarDays],
   ['habits', 'Habits', CheckSquare],
   ['goals', 'Goals', ListChecks],
+  ['sleep', 'Sleep', Moon],
   ['budget', 'Budget', WalletCards],
   ['analytics', 'Analytics', BarChart3],
   ['identity', 'Identity', CircleUserRound],

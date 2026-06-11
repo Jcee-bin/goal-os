@@ -23,6 +23,7 @@ test('creates the complete local schema and seeded user', () => {
     'habit_completions',
     'habits',
     'profiles',
+    'sleep_logs',
     'tasks',
     'transactions',
     'users',

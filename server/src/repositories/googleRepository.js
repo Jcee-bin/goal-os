@@ -7,6 +7,7 @@ export function createGoogleRepository(db) {
           refresh_token_encrypted AS refreshTokenEncrypted,
           calendar_id AS calendarId,
           connected_at AS connectedAt,
+          last_polled_at AS lastPolledAt,
           updated_at AS updatedAt
         FROM google_integrations WHERE user_id = ?
       `).get(userId)
@@ -35,10 +36,17 @@ export function createGoogleRepository(db) {
     disconnect(userId, updatedAt) {
       db.prepare(`
         UPDATE google_integrations
-        SET refresh_token_encrypted = NULL, connected_at = NULL, updated_at = ?
+        SET refresh_token_encrypted = NULL, connected_at = NULL,
+            last_polled_at = NULL, updated_at = ?
         WHERE user_id = ?
       `).run(updatedAt, userId)
       return this.getIntegration(userId)
+    },
+
+    saveLastPolled(userId, lastPolledAt) {
+      db.prepare(`
+        UPDATE google_integrations SET last_polled_at = ?, updated_at = ? WHERE user_id = ?
+      `).run(lastPolledAt, lastPolledAt, userId)
     },
 
     saveState(userId, state, expiresAt) {
@@ -49,10 +57,10 @@ export function createGoogleRepository(db) {
 
     consumeState(userId, state, currentTime) {
       const row = db.prepare(`
-        SELECT state FROM google_oauth_states
+        DELETE FROM google_oauth_states
         WHERE state = ? AND user_id = ? AND expires_at >= ?
+        RETURNING state
       `).get(state, userId, currentTime)
-      db.prepare('DELETE FROM google_oauth_states WHERE state = ?').run(state)
       return Boolean(row)
     },
 

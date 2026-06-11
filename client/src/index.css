@@ -1,9 +1,10 @@
 :root {
   font-family: Inter, system-ui, sans-serif;
-  color: #1a211e;
-  background: #f5f7f4;
+  color: #e4ebe5;
+  background: #151a16;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {

@@ -22,6 +22,7 @@ export function createGoogleIntegrationService({
       connected: Boolean(integration?.refreshTokenEncrypted),
       calendarId: integration?.calendarId || null,
       connectedAt: integration?.connectedAt || null,
+      lastPolledAt: integration?.lastPolledAt || null,
     }
   }
 
@@ -140,6 +141,105 @@ export function createGoogleIntegrationService({
     }
   }
 
+  async function fetchAllUpdatedEvents(auth, updatedMin) {
+    const items = []
+    let pageToken
+    let pages = 0
+    do {
+      const page = await googleClient.listEvents({
+        accessToken: auth.accessToken,
+        calendarId: auth.integration.calendarId,
+        updatedMin,
+        pageToken,
+      })
+      items.push(...(page?.items || []))
+      pageToken = page?.nextPageToken
+      pages++
+    } while (pageToken && pages < 20)
+    return items
+  }
+
+  async function pollInbound() {
+    const auth = await access()
+    if (!auth) return { processed: 0, imported: 0 }
+    const integration = repository.getIntegration(userId)
+    const updatedMin = integration.lastPolledAt || null
+    const items = await fetchAllUpdatedEvents(auth, updatedMin)
+    let processed = 0
+    let imported = 0
+    for (const event of items) {
+      if (!event.start?.dateTime) continue
+      const task = tasks.getByCalendarEventId(userId, event.id)
+      if (task) {
+        if (event.status === 'cancelled') {
+          tasks.unlinkCalendar(userId, task.id, now().toISOString())
+          processed++
+        } else if (task.status !== 'completed') {
+          const googleMs = new Date(event.updated).getTime()
+          const taskMs = new Date(task.updatedAt).getTime()
+          if (googleMs > taskMs + 2000) {
+            try {
+              const { scheduledOn, time: startTime } = parseGoogleDateTime(event.start.dateTime)
+              const { time: endTime } = parseGoogleDateTime(event.end.dateTime)
+              tasks.applyInboundSync(userId, task.id, {
+                title: String(event.summary || '').slice(0, 160),
+                notes: String(event.description || '').slice(0, 1000),
+                scheduledOn,
+                startTime,
+                endTime,
+                updatedAt: event.updated,
+              })
+              processed++
+            } catch {
+              // skip events with unparseable datetimes
+            }
+          }
+        }
+      } else {
+        if (event.status === 'cancelled') continue
+        try {
+          const { scheduledOn, time: startTime } = parseGoogleDateTime(event.start.dateTime)
+          const { time: endTime } = parseGoogleDateTime(event.end.dateTime)
+          const timestamp = now().toISOString()
+          tasks.insert(userId, {
+            id: crypto.randomUUID(),
+            title: String(event.summary || 'Untitled').slice(0, 160),
+            notes: String(event.description || '').slice(0, 1000),
+            area: 'personal',
+            priority: 'normal',
+            scheduledOn,
+            startTime,
+            endTime,
+            calendarEnabled: true,
+            calendarEventId: event.id,
+            syncStatus: 'synced',
+            createdAt: timestamp,
+            updatedAt: event.updated || timestamp,
+          })
+          imported++
+        } catch {
+          // skip events with unparseable datetimes
+        }
+      }
+    }
+    repository.saveLastPolled(userId, now().toISOString())
+    return { processed, imported }
+  }
+
+  let syncing = false
+  async function syncNow() {
+    if (syncing) return { processed: 0, imported: 0 }
+    syncing = true
+    try {
+      const auth = await access()
+      if (auth) await flushOutbox(auth)
+      for (const task of tasks.listPendingCalendar(userId)) await syncTask(task)
+      return pollInbound()
+    } finally {
+      syncing = false
+    }
+  }
+
   return {
     status,
 
@@ -183,6 +283,8 @@ export function createGoogleIntegrationService({
     },
 
     syncTask,
+    pollInbound,
+    syncNow,
 
     async deleteTask(task) {
       if (!task.calendarEventId) return
@@ -219,4 +321,11 @@ function calendarTask(task) {
     ...task,
     title: task.status === 'completed' ? `Done: ${task.title}` : task.title,
   }
+}
+
+function parseGoogleDateTime(dateTime) {
+  const tIdx = dateTime.indexOf('T')
+  const scheduledOn = dateTime.slice(0, tIdx)
+  const time = dateTime.slice(tIdx + 1, tIdx + 6)
+  return { scheduledOn, time }
 }

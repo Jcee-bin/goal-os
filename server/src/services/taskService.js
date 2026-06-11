@@ -46,7 +46,7 @@ export function createTaskService({
     if (startTime && !scheduledOn) {
       throw validationError('scheduledOn', 'Timed tasks require a scheduled date')
     }
-    if (startTime && endTime <= startTime) {
+    if (startTime && endTime && toMinutes(endTime) <= toMinutes(startTime)) {
       throw validationError('endTime', 'End time must be after start time')
     }
     if (calendarEnabled && !startTime) {
@@ -161,6 +161,11 @@ export function createTaskService({
       return withOverlap(await calendarService.syncTask(get(id)))
     },
   }
+}
+
+function toMinutes(t) {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
 }
 
 function nullable(value, fallback) {

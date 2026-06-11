@@ -12,7 +12,7 @@ import {
   Trash2,
   Unplug,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const emptyForm = (date) => ({
   title: '',
@@ -36,6 +36,7 @@ export default function TodayView({
   onDisconnect,
   onReopen,
   onRetrySync,
+  onSync,
   onUpdate,
   tasks,
 }) {
@@ -185,20 +186,23 @@ export default function TodayView({
           googleStatus={googleStatus}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
+          onSync={onSync}
         />
       </section>
 
       <section className="today-board">
-        <TaskSection
-          className="overdue-section"
-          empty="Nothing overdue."
-          onComplete={onComplete}
-          onDelete={onDelete}
-          onEdit={edit}
-          onRetrySync={onRetrySync}
-          tasks={tasks.overdue}
-          title="Overdue"
-        />
+        {tasks.overdue.length > 0 && (
+          <TaskSection
+            className="overdue-section"
+            empty="Nothing overdue."
+            onComplete={onComplete}
+            onDelete={onDelete}
+            onEdit={edit}
+            onRetrySync={onRetrySync}
+            tasks={tasks.overdue}
+            title="Overdue"
+          />
+        )}
         <TaskSection
           empty="Your inbox is clear."
           onComplete={onComplete}
@@ -208,15 +212,17 @@ export default function TodayView({
           tasks={tasks.inbox}
           title="Inbox"
         />
-        <TaskSection
-          empty="No anytime tasks for this day."
-          onComplete={onComplete}
-          onDelete={onDelete}
-          onEdit={edit}
-          onRetrySync={onRetrySync}
-          tasks={tasks.anytime}
-          title="Anytime"
-        />
+        {tasks.anytime.length > 0 && (
+          <TaskSection
+            empty="No anytime tasks for this day."
+            onComplete={onComplete}
+            onDelete={onDelete}
+            onEdit={edit}
+            onRetrySync={onRetrySync}
+            tasks={tasks.anytime}
+            title="Anytime"
+          />
+        )}
         <TaskSection
           empty="No time blocks scheduled."
           onComplete={onComplete}
@@ -253,25 +259,63 @@ export default function TodayView({
   )
 }
 
-function CalendarConnection({ googleStatus, onConnect, onDisconnect }) {
+function CalendarConnection({ googleStatus, onConnect, onDisconnect, onSync }) {
+  const [open, setOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleOutside(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [open])
+
+  async function handleSync() {
+    setSyncing(true)
+    try { await onSync() } finally { setSyncing(false) }
+  }
+
+  const lastSynced = googleStatus.lastPolledAt
+    ? new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' })
+        .format(new Date(googleStatus.lastPolledAt))
+    : null
+
+  const statusLabel = googleStatus.connected ? 'Connected' : googleStatus.configured ? 'Ready' : 'Setup required'
+
   return (
-    <aside className="panel calendar-connection">
-      <div className="calendar-icon"><CalendarCheck size={21} /></div>
-      <div>
-        <span className="eyebrow">Google Calendar</span>
-        <strong>{googleStatus.connected ? 'Connected' : googleStatus.configured ? 'Ready to connect' : 'Setup required'}</strong>
-        <p>
+    <div className="cal-wrap" ref={ref}>
+      <button className="cal-trigger panel" onClick={() => setOpen((o) => !o)} type="button">
+        <div className="calendar-icon"><CalendarCheck size={17} /></div>
+        <div className="cal-trigger-label">
+          <span className="eyebrow">Google Calendar</span>
+          <strong className={googleStatus.connected ? 'cal-status-connected' : ''}>{statusLabel}</strong>
+        </div>
+        <ChevronDown className={open ? 'cal-chevron open' : 'cal-chevron'} size={15} />
+      </button>
+      {open && (
+        <div className="cal-popover panel">
+          <p>
+            {googleStatus.connected
+              ? 'Selected time blocks publish to your Goal OS calendar.'
+              : googleStatus.configured
+                ? 'Connect once to publish selected time blocks.'
+                : 'Add the Google OAuth values to the server environment.'}
+          </p>
+          {googleStatus.connected && lastSynced && <small className="cal-last-synced">Last synced {lastSynced}</small>}
           {googleStatus.connected
-            ? 'Selected time blocks publish to your Goal OS calendar.'
-            : googleStatus.configured
-              ? 'Connect once to publish selected time blocks.'
-              : 'Add the Google OAuth values to the server environment.'}
-        </p>
-      </div>
-      {googleStatus.connected
-        ? <button className="danger-outline" onClick={onDisconnect} type="button"><Unplug size={15} /> Disconnect</button>
-        : <button className="wide-secondary" disabled={!googleStatus.configured} onClick={onConnect} type="button"><CalendarPlus size={15} /> Connect</button>}
-    </aside>
+            ? (
+              <div className="cal-popover-actions">
+                <button className="wide-secondary" disabled={syncing} onClick={handleSync} type="button">
+                  <RefreshCcw size={14} /> {syncing ? 'Syncing…' : 'Sync now'}
+                </button>
+                <button className="danger-outline" onClick={onDisconnect} type="button"><Unplug size={14} /> Disconnect</button>
+              </div>
+            )
+            : <button className="wide-secondary" disabled={!googleStatus.configured} onClick={onConnect} type="button"><CalendarPlus size={14} /> Connect</button>}
+        </div>
+      )}
+    </div>
   )
 }
 

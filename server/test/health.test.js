@@ -5,7 +5,8 @@ import { createDatabase } from '../src/database.js'
 
 test('health endpoint reports a working API', async () => {
   const db = createDatabase()
-  const server = createApp({ db }).listen(0)
+  const { app } = createApp({ db })
+  const server = app.listen(0)
   await new Promise((resolve) => server.once('listening', resolve))
 
   try {
