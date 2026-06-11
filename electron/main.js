@@ -125,7 +125,11 @@ function createMiniWindow() {
       nodeIntegration: false,
     },
   })
-  miniWindow.loadFile(path.join(__dirname, 'mini-timer.html'))
+  if (isDev) {
+    miniWindow.loadURL('http://localhost:5174/mini-timer.html')
+  } else {
+    miniWindow.loadFile(path.join(__dirname, '..', 'client', 'dist', 'mini-timer.html'))
+  }
   miniWindow.on('closed', () => { miniWindow = null })
 }
 

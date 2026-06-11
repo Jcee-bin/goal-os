@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Focus Timer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 200px; height: 220px; background: transparent; overflow: hidden; user-select: none; }
+
+  .widget {
+    width: 200px; height: 220px;
+    background: rgba(13, 17, 23, 0.93);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 12px 0 14px;
+    backdrop-filter: blur(12px);
+    -webkit-app-region: drag;
+  }
+
+  .drag-bar {
+    width: 32px; height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px; margin-bottom: 10px;
+  }
+
+  .mode { font-size: 11px; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+
+  .dial {
+    position: relative; width: 110px; height: 110px; margin-bottom: 10px;
+  }
+  svg { position: absolute; top: 0; left: 0; width: 110px; height: 110px; transform: rotate(-90deg); }
+  .track { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 8; }
+  .progress { fill: none; stroke: #4ade80; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.25s linear; }
+  .readout { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .readout strong { font-size: 22px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+
+  .controls {
+    display: flex; gap: 10px; -webkit-app-region: no-drag;
+  }
+  button {
+    border: none; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.8; }
+  .btn-toggle {
+    background: #4ade80; color: #000;
+    padding: 6px 22px;
+  }
+  .btn-close {
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5);
+    padding: 6px 10px; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="drag-bar"></div>
+  <div class="mode" id="mode">FOCUS</div>
+  <div class="dial">
+    <svg viewBox="0 0 110 110">
+      <circle class="track" cx="55" cy="55" r="48"/>
+      <circle class="progress" id="ring" cx="55" cy="55" r="48"/>
+    </svg>
+    <div class="readout"><strong id="time">25:00</strong></div>
+  </div>
+  <div class="controls">
+    <button class="btn-toggle" id="toggle">Start</button>
+    <button class="btn-close" id="close">✕</button>
+  </div>
+</div>
+<script>
+  const STORAGE_KEY = 'focus-timer-state'
+  const ring = document.getElementById('ring')
+  const timeEl = document.getElementById('time')
+  const modeEl = document.getElementById('mode')
+  const toggleBtn = document.getElementById('toggle')
+  const closeBtn = document.getElementById('close')
+  const R = 48, C = 2 * Math.PI * R
+  ring.style.strokeDasharray = C
+
+  const MODE_LABELS = { focus: 'FOCUS', short: 'SHORT BREAK', long: 'LONG BREAK' }
+  const MODE_COLORS = { focus: '#4ade80', short: '#60a5fa', long: '#a78bfa' }
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {} } catch { return {} }
+  }
+
+  function fmt(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000))
+    return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`
+  }
+
+  function render() {
+    const s = load()
+    const mode = s.mode || 'focus'
+    const settings = s.settings || { pomodoro:25, short:5, long:15 }
+    const modeKey = mode === 'focus' ? 'pomodoro' : mode
+    const totalMs = (settings[modeKey] || 25) * 60000
+    let remaining = s.running && s.endTime
+      ? Math.max(0, s.endTime - Date.now())
+      : (s.remainingMs ?? totalMs)
+    const frac = totalMs > 0 ? Math.min(1, remaining / totalMs) : 0
+    ring.style.strokeDashoffset = C * (1 - frac)
+    ring.style.stroke = MODE_COLORS[mode] || '#4ade80'
+    timeEl.textContent = fmt(remaining)
+    modeEl.textContent = MODE_LABELS[mode] || 'FOCUS'
+    toggleBtn.textContent = s.running ? 'Pause' : 'Start'
+    toggleBtn.style.background = MODE_COLORS[mode] || '#4ade80'
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    // Delegate to main window via localStorage flag — main window's tick loop will pick it up
+    const s = load()
+    const flag = { ...s, _miniAction: s.running ? 'pause' : 'start', _miniTs: Date.now() }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(flag))
+    window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }))
+    setTimeout(render, 50)
+  })
+
+  closeBtn.addEventListener('click', () => window.close())
+
+  render()
+  setInterval(render, 500)
+  window.addEventListener('storage', render)
+</script>
+</body>
+</html>
