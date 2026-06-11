@@ -61,6 +61,7 @@
         <span class="ft-title">Focus</span>
         <div class="ft-actions">
           <div class="ft-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <button class="ft-min" type="button" data-ft-popout aria-label="Pop out timer" title="Pop out">&#8599;</button>
           <button class="ft-min" type="button" data-ft-settings aria-label="Timer settings">&#9881;</button>
           <button class="ft-min" type="button" data-ft-min aria-label="Minimize timer">&#8211;</button>
         </div>
@@ -111,6 +112,14 @@
         <span>Long Break interval</span>
         <input class="ft-num" type="number" min="1" max="12" data-ft-set="longInterval">
       </div>
+      <div class="ft-row">
+        <span>Ring sound</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="ft-sound-name" data-ft-sound-name>Built-in</span>
+          <button class="ft-sound-btn" type="button" data-ft-sound-browse>Browse…</button>
+          <button class="ft-sound-btn ft-sound-clear" type="button" data-ft-sound-clear title="Reset to built-in">✕</button>
+        </div>
+      </div>
     </div>
 
     <button class="ft-pill" type="button" data-ft-drag data-ft-expand aria-label="Expand timer">
@@ -127,12 +136,16 @@
   const minEl = root.querySelector("[data-ft-min]");
   const gearEl = root.querySelector("[data-ft-settings]");
   const closeSettingsEl = root.querySelector("[data-ft-settings-close]");
+  const popoutEl = root.querySelector("[data-ft-popout]");
   const progressEl = root.querySelector(".ft-progress");
   const modeButtons = root.querySelectorAll("[data-ft-mode]");
   const dots = root.querySelectorAll(".ft-dots i");
   const pill = root.querySelector(".ft-pill");
   const pillTimeEl = root.querySelector("[data-ft-pill-time]");
   const settingInputs = root.querySelectorAll("[data-ft-set]");
+  const soundNameEl = root.querySelector("[data-ft-sound-name]");
+  const soundBrowseEl = root.querySelector("[data-ft-sound-browse]");
+  const soundClearEl = root.querySelector("[data-ft-sound-clear]");
 
   const radius = progressEl.r.baseVal.value;
   const circumference = 2 * Math.PI * radius;
@@ -207,6 +220,7 @@
       return;
     }
     renderTimer();
+    window.electronAPI?.pomodoroTick(formatTime(remainingMs), true);
   }
 
   function start() {
@@ -258,9 +272,16 @@
     }
     pulse();
     playChime();
+    // System notification (Electron only)
+    if (window.electronAPI) {
+      const title = finishedMode === "focus" ? "Focus session done!" : "Break over";
+      const body = finishedMode === "focus" ? "Take a break. You earned it." : "Back to work, sir.";
+      window.electronAPI.pomodoroNotify(title, body);
+    }
     const next = nextModeAfter(finishedMode);
     const autoStart = next === "focus" ? settings.autoPomodoros : settings.autoBreaks;
     loadMode(next, { autoStart });
+    window.electronAPI?.pomodoroTick(formatTime(modeSeconds(next) * 1000), false);
   }
 
   function resetTimer() {
@@ -277,7 +298,7 @@
     root.classList.add("is-complete");
   }
 
-  function playChime() {
+  function playChimeSynth() {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
@@ -297,6 +318,22 @@
       osc.onended = () => ctx.close();
     } catch (error) {
       /* audio unavailable; visual cue is enough */
+    }
+  }
+
+  function playChime() {
+    const customPath = localStorage.getItem("focus-timer-sound");
+    if (window.electronAPI) {
+      // Electron: play real audio file
+      const src = customPath
+        ? `file:///${customPath.replace(/\\/g, "/")}`
+        : `file:///${window.electronAPI.builtinChimePath().replace(/\\/g, "/")}`;
+      new Audio(src).play().catch(() => playChimeSynth());
+    } else if (customPath) {
+      // Browser with user-picked file stored as object URL
+      new Audio(customPath).play().catch(() => playChimeSynth());
+    } else {
+      playChimeSynth();
     }
   }
 
@@ -390,6 +427,75 @@
     attachDrag(handle, handle.hasAttribute("data-ft-expand"));
   });
   window.addEventListener("resize", applyLayout);
+
+  // Pop-out button (Electron only — hidden in browser)
+  if (popoutEl) {
+    if (!window.electronAPI) {
+      popoutEl.style.display = "none";
+    } else {
+      popoutEl.addEventListener("click", () => window.electronAPI.openMiniTimer());
+    }
+  }
+
+  // Sound picker
+  function updateSoundLabel() {
+    const p = localStorage.getItem("focus-timer-sound");
+    if (soundNameEl) {
+      soundNameEl.textContent = p ? p.split(/[\\/]/).pop() : "Built-in";
+    }
+  }
+  updateSoundLabel();
+
+  if (soundBrowseEl) {
+    soundBrowseEl.addEventListener("click", async () => {
+      if (window.electronAPI) {
+        const p = await window.electronAPI.pickSoundFile();
+        if (p) { localStorage.setItem("focus-timer-sound", p); updateSoundLabel(); }
+      } else {
+        // Browser fallback
+        const input = document.createElement("input");
+        input.type = "file"; input.accept = "audio/*";
+        input.onchange = () => {
+          if (input.files[0]) {
+            const url = URL.createObjectURL(input.files[0]);
+            localStorage.setItem("focus-timer-sound", url);
+            updateSoundLabel();
+          }
+        };
+        input.click();
+      }
+    });
+  }
+
+  if (soundClearEl) {
+    soundClearEl.addEventListener("click", () => {
+      localStorage.removeItem("focus-timer-sound");
+      updateSoundLabel();
+    });
+  }
+
+  // Listen for tray actions and mini-timer actions sent via localStorage
+  window.addEventListener("storage", (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    try {
+      const s = JSON.parse(e.newValue) || {};
+      if (s._miniAction && s._miniTs && (Date.now() - s._miniTs) < 2000) {
+        if (s._miniAction === "pause") pause();
+        else if (s._miniAction === "start") start();
+        // Clear the action flag
+        delete s._miniAction; delete s._miniTs;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+      }
+    } catch { /* ignore */ }
+  });
+
+  // Tray start/pause/reset from main process
+  if (window.electronAPI) {
+    const { ipcRenderer } = window.__electronInternals__ || {};
+  }
+  // IPC from main → renderer via webContents.send (no extra bridge needed — handled in preload)
+  document.addEventListener("tray-toggle", () => { if (running) pause(); else start(); });
+  document.addEventListener("tray-reset", resetTimer);
 
   // ── Hydrate from saved state ──
   function hydrate() {

@@ -1,14 +1,20 @@
 {
   "name": "goal-os",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "build": "npm run build --prefix client",
     "test": "npm test --prefix server && npm test --prefix client",
     "lint": "npm run lint --prefix client",
-    "start": "npm run start --prefix server"
+    "start": "npm run start --prefix server",
+    "electron:dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\" \"wait-on http://localhost:5174 && electron .\"",
+    "electron:build": "npm run build --prefix client && electron-builder"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.2",
+    "wait-on": "^9.0.10"
   }
 }

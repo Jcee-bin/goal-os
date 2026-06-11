@@ -5,7 +5,9 @@ import { createDatabase } from './database.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.PORT || 8787)
-const db = createDatabase({ filename: resolve(here, '..', 'data', 'goal-os.sqlite') })
+const dbPathArg = process.argv.find((a) => a.startsWith('--db-path='))?.split('=').slice(1).join('=')
+const dbFile = dbPathArg ?? resolve(here, '..', 'data', 'goal-os.sqlite')
+const db = createDatabase({ filename: dbFile })
 const { app, googleService } = createApp({
   db,
   groqApiKey: process.env.GROQ_API_KEY,

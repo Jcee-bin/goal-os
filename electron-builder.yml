@@ -1,0 +1,33 @@
+appId: com.goalos.app
+productName: Goal OS
+copyright: Goal OS
+
+directories:
+  output: dist-electron
+
+files:
+  - electron/**
+  - client/dist/**
+  - server/src/**
+  - server/package.json
+  - package.json
+
+extraResources:
+  - from: server/
+    to: server/
+  - from: electron/assets/
+    to: assets/
+
+win:
+  icon: electron/assets/icon.ico
+  target:
+    - target: nsis
+      arch: x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+publish: null
