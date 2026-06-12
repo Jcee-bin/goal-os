@@ -15,8 +15,8 @@ export function createGoogleIntegrationService({
     config.clientId && config.clientSecret && config.redirectUri && config.tokenEncryptionKey,
   )
 
-  function status() {
-    const integration = repository.getIntegration(userId)
+  async function status() {
+    const integration = await repository.getIntegration(userId)
     return {
       configured,
       connected: Boolean(integration?.refreshTokenEncrypted),
@@ -33,7 +33,7 @@ export function createGoogleIntegrationService({
   }
 
   async function access() {
-    const integration = repository.getIntegration(userId)
+    const integration = await repository.getIntegration(userId)
     if (!integration?.refreshTokenEncrypted) return null
     const refreshToken = decryptToken(
       integration.refreshTokenEncrypted,
@@ -62,7 +62,7 @@ export function createGoogleIntegrationService({
             eventId: task.calendarEventId,
           })
         } catch (error) {
-          repository.addDeleteOutbox(
+          await repository.addDeleteOutbox(
             userId,
             task.calendarEventId,
             now().toISOString(),
@@ -70,7 +70,7 @@ export function createGoogleIntegrationService({
           )
         }
       } else {
-        repository.addDeleteOutbox(
+        await repository.addDeleteOutbox(
           userId,
           task.calendarEventId,
           now().toISOString(),
@@ -127,14 +127,14 @@ export function createGoogleIntegrationService({
   }
 
   async function flushOutbox(auth) {
-    for (const item of repository.listOutbox(userId)) {
+    for (const item of await repository.listOutbox(userId)) {
       try {
         await googleClient.deleteEvent({
           accessToken: auth.accessToken,
           calendarId: auth.integration.calendarId,
           eventId: item.eventId,
         })
-        repository.deleteOutbox(item.id)
+        await repository.deleteOutbox(item.id)
       } catch {
         // Keep the deletion queued for a future successful request.
       }
@@ -162,17 +162,17 @@ export function createGoogleIntegrationService({
   async function pollInbound() {
     const auth = await access()
     if (!auth) return { processed: 0, imported: 0 }
-    const integration = repository.getIntegration(userId)
+    const integration = await repository.getIntegration(userId)
     const updatedMin = integration.lastPolledAt || null
     const items = await fetchAllUpdatedEvents(auth, updatedMin)
     let processed = 0
     let imported = 0
     for (const event of items) {
       if (!event.start?.dateTime) continue
-      const task = tasks.getByCalendarEventId(userId, event.id)
+      const task = await tasks.getByCalendarEventId(userId, event.id)
       if (task) {
         if (event.status === 'cancelled') {
-          tasks.unlinkCalendar(userId, task.id, now().toISOString())
+          await tasks.unlinkCalendar(userId, task.id, now().toISOString())
           processed++
         } else if (task.status !== 'completed') {
           const googleMs = new Date(event.updated).getTime()
@@ -181,7 +181,7 @@ export function createGoogleIntegrationService({
             try {
               const { scheduledOn, time: startTime } = parseGoogleDateTime(event.start.dateTime)
               const { time: endTime } = parseGoogleDateTime(event.end.dateTime)
-              tasks.applyInboundSync(userId, task.id, {
+              await tasks.applyInboundSync(userId, task.id, {
                 title: String(event.summary || '').slice(0, 160),
                 notes: String(event.description || '').slice(0, 1000),
                 scheduledOn,
@@ -201,7 +201,7 @@ export function createGoogleIntegrationService({
           const { scheduledOn, time: startTime } = parseGoogleDateTime(event.start.dateTime)
           const { time: endTime } = parseGoogleDateTime(event.end.dateTime)
           const timestamp = now().toISOString()
-          tasks.insert(userId, {
+          await tasks.insert(userId, {
             id: crypto.randomUUID(),
             title: String(event.summary || 'Untitled').slice(0, 160),
             notes: String(event.description || '').slice(0, 1000),
@@ -222,7 +222,7 @@ export function createGoogleIntegrationService({
         }
       }
     }
-    repository.saveLastPolled(userId, now().toISOString())
+    await repository.saveLastPolled(userId, now().toISOString())
     return { processed, imported }
   }
 
@@ -233,7 +233,7 @@ export function createGoogleIntegrationService({
     try {
       const auth = await access()
       if (auth) await flushOutbox(auth)
-      for (const task of tasks.listPendingCalendar(userId)) await syncTask(task)
+      for (const task of await tasks.listPendingCalendar(userId)) await syncTask(task)
       return pollInbound()
     } finally {
       syncing = false
@@ -243,42 +243,42 @@ export function createGoogleIntegrationService({
   return {
     status,
 
-    connect() {
+    async connect() {
       requireConfigured()
       const state = crypto.randomUUID()
       const expiresAt = new Date(now().getTime() + 10 * 60 * 1000).toISOString()
-      repository.saveState(userId, state, expiresAt)
+      await repository.saveState(userId, state, expiresAt)
       return { url: googleClient.authorizationUrl({ state }) }
     },
 
     async callback({ code, state }) {
       requireConfigured()
-      if (!code || !state || !repository.consumeState(userId, state, now().toISOString())) {
+      if (!code || !state || !(await repository.consumeState(userId, state, now().toISOString()))) {
         throw Object.assign(new Error('Invalid or expired Google authorization state'), { status: 400 })
       }
       const tokens = await googleClient.exchangeCode(code)
       if (!tokens.refreshToken) {
         throw Object.assign(new Error('Google did not return a refresh token'), { status: 400 })
       }
-      const existing = repository.getIntegration(userId)
+      const existing = await repository.getIntegration(userId)
       const calendarId = await googleClient.ensureCalendar({
         accessToken: tokens.accessToken,
         calendarId: existing?.calendarId,
       })
       const timestamp = now().toISOString()
-      const savedIntegration = repository.saveIntegration(userId, {
+      const savedIntegration = await repository.saveIntegration(userId, {
         refreshTokenEncrypted: encryptToken(tokens.refreshToken, config.tokenEncryptionKey),
         calendarId,
         connectedAt: timestamp,
         updatedAt: timestamp,
       })
       await flushOutbox({ accessToken: tokens.accessToken, integration: savedIntegration })
-      for (const task of tasks.listPendingCalendar(userId)) await syncTask(task)
+      for (const task of await tasks.listPendingCalendar(userId)) await syncTask(task)
       return status()
     },
 
-    disconnect() {
-      repository.disconnect(userId, now().toISOString())
+    async disconnect() {
+      await repository.disconnect(userId, now().toISOString())
       return status()
     },
 
@@ -290,7 +290,7 @@ export function createGoogleIntegrationService({
       if (!task.calendarEventId) return
       const auth = await access()
       if (!auth) {
-        repository.addDeleteOutbox(
+        await repository.addDeleteOutbox(
           userId,
           task.calendarEventId,
           now().toISOString(),
@@ -305,7 +305,7 @@ export function createGoogleIntegrationService({
           eventId: task.calendarEventId,
         })
       } catch (error) {
-        repository.addDeleteOutbox(
+        await repository.addDeleteOutbox(
           userId,
           task.calendarEventId,
           now().toISOString(),

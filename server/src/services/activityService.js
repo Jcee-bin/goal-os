@@ -28,20 +28,20 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
     }
   }
 
-  function transaction(work) {
-    db.exec('BEGIN IMMEDIATE')
+  async function transaction(work) {
+    await db.exec('BEGIN IMMEDIATE')
     try {
-      const result = work()
-      db.exec('COMMIT')
+      const result = await work()
+      await db.exec('COMMIT')
       return result
     } catch (error) {
-      db.exec('ROLLBACK')
+      await db.exec('ROLLBACK')
       throw error
     }
   }
 
-  function award({ sourceType, sourceId, description, amount, time }) {
-    repository.insertXp(userId, {
+  async function award({ sourceType, sourceId, description, amount, time }) {
+    await repository.insertXp(userId, {
       id: crypto.randomUUID(),
       sourceType,
       sourceId,
@@ -49,7 +49,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
       eventOn: time.eventOn,
       createdAt: time.createdAt,
     })
-    repository.insertEvidence(userId, {
+    await repository.insertEvidence(userId, {
       id: crypto.randomUUID(),
       sourceType,
       sourceId,
@@ -84,29 +84,31 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
     }
   }
 
-  function listHabits() {
+  async function listHabits() {
     const time = clock()
-    return repository.listHabits(userId, time.eventOn).map((habit) => ({
+    const habits = await repository.listHabits(userId, time.eventOn)
+    return Promise.all(habits.map(async (habit) => ({
       ...habit,
       active: Boolean(habit.active),
       done: habit.completedToday >= habit.targetPerDay,
-      streak: calculateStreak(repository.completionDates(userId, habit.id), time.date),
-    }))
+      streak: calculateStreak(await repository.completionDates(userId, habit.id), time.date),
+    })))
   }
 
-  function listGoals() {
+  async function listGoals() {
     const { weekKey } = clock()
-    repository.resetWeeklyGoals(userId, weekKey)
-    return repository.listGoals(userId).map((goal) => ({
+    await repository.resetWeeklyGoals(userId, weekKey)
+    const goals = await repository.listGoals(userId)
+    return goals.map((goal) => ({
       ...goal,
       completionAwarded: Boolean(goal.completionAwarded),
       percent: Math.min(100, Math.round((goal.current / goal.target) * 100)),
     }))
   }
 
-  function analytics() {
+  async function analytics() {
     const time = clock()
-    const habits = listHabits()
+    const habits = await listHabits()
     const targetVotes = habits.reduce((sum, habit) => sum + habit.targetPerDay, 0)
     const completedVotes = habits.reduce(
       (sum, habit) => sum + Math.min(habit.completedToday, habit.targetPerDay),
@@ -115,7 +117,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
     const sevenDaysAgo = new Date(time.date)
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
     const counts = new Map(
-      repository.completionCountsByDate(userId, getDateKey(sevenDaysAgo))
+      (await repository.completionCountsByDate(userId, getDateKey(sevenDaysAgo)))
         .map(({ date, count }) => [date, count]),
     )
     const weeklyTrend = Array.from({ length: 7 }, (_, index) => {
@@ -124,7 +126,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
       const date = getDateKey(day)
       return { date, count: counts.get(date) || 0 }
     })
-    const xp = repository.xpSummary(userId, time.eventOn)
+    const xp = await repository.xpSummary(userId, time.eventOn)
 
     return {
       productivity: targetVotes ? Math.round((completedVotes / targetVotes) * 100) : 0,
@@ -140,8 +142,8 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
   }
 
   return {
-    getProfile() {
-      const profile = repository.getProfile(userId)
+    async getProfile() {
+      const profile = await repository.getProfile(userId)
       return {
         ...profile,
         identityConfirmed: Boolean(profile.identityConfirmed),
@@ -149,19 +151,19 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
       }
     },
 
-    updateProfile(input) {
-      const existing = this.getProfile()
+    async updateProfile(input) {
+      const existing = await this.getProfile()
       const next = {
         identity: requireText(input.identity ?? existing.identity, 'identity', 240),
         arena: requireText(input.arena ?? existing.arena, 'arena', 80),
         identityConfirmed: input.identityConfirmed ?? existing.identityConfirmed,
       }
       const changed = next.identity !== existing.identity || next.arena !== existing.arena
-      return transaction(() => {
-        const profile = repository.updateProfile(userId, next)
+      return transaction(async () => {
+        const profile = await repository.updateProfile(userId, next)
         if (changed) {
           const time = clock()
-          award({
+          await award({
             sourceType: 'identity',
             sourceId: userId,
             description: 'Identity updated',
@@ -175,7 +177,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
 
     listHabits,
 
-    createHabit(input) {
+    async createHabit(input) {
       const habit = normalizeHabit(input)
       return repository.insertHabit(userId, {
         id: crypto.randomUUID(),
@@ -184,46 +186,47 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
       })
     },
 
-    updateHabit(id, input) {
-      const existing = repository.getHabit(userId, id)
+    async updateHabit(id, input) {
+      const existing = await repository.getHabit(userId, id)
       if (!existing) throw notFound('Habit not found')
       return repository.updateHabit(userId, id, normalizeHabit(input, existing))
     },
 
-    deleteHabit(id) {
-      const result = repository.deleteHabit(userId, id)
+    async deleteHabit(id) {
+      const result = await repository.deleteHabit(userId, id)
       if (!result.changes) throw notFound('Habit not found')
       return { deleted: true }
     },
 
-    completeHabit(id) {
-      const habit = repository.getHabit(userId, id)
+    async completeHabit(id) {
+      const habit = await repository.getHabit(userId, id)
       if (!habit) throw notFound('Habit not found')
       const time = clock()
-      const count = repository.countHabitCompletions(userId, id, time.eventOn)
+      const count = await repository.countHabitCompletions(userId, id, time.eventOn)
       if (count >= habit.targetPerDay) throw conflict('Habit is already complete for today')
 
-      return transaction(() => {
-        repository.insertHabitCompletion(userId, {
+      return transaction(async () => {
+        await repository.insertHabitCompletion(userId, {
           id: crypto.randomUUID(),
           habitId: id,
           eventOn: time.eventOn,
           createdAt: time.createdAt,
         })
-        award({
+        await award({
           sourceType: 'habit',
           sourceId: id,
           description: habit.name,
           amount: habit.xp,
           time,
         })
-        return listHabits().find((item) => item.id === id)
+        const habits = await listHabits()
+        return habits.find((item) => item.id === id)
       })
     },
 
     listGoals,
 
-    createGoal(input) {
+    async createGoal(input) {
       const time = clock()
       const goal = normalizeGoal(input, {}, time.weekKey)
       return repository.insertGoal(userId, {
@@ -233,44 +236,44 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
       })
     },
 
-    updateGoal(id, input) {
-      const existing = repository.getGoal(userId, id)
+    async updateGoal(id, input) {
+      const existing = await repository.getGoal(userId, id)
       if (!existing) throw notFound('Goal not found')
       return repository.updateGoal(userId, id, normalizeGoal(input, existing, clock().weekKey))
     },
 
-    deleteGoal(id) {
-      const result = repository.deleteGoal(userId, id)
+    async deleteGoal(id) {
+      const result = await repository.deleteGoal(userId, id)
       if (!result.changes) throw notFound('Goal not found')
       return { deleted: true }
     },
 
-    progressGoal(id, amountInput = 1) {
+    async progressGoal(id, amountInput = 1) {
       const time = clock()
-      repository.resetWeeklyGoals(userId, time.weekKey)
-      const goal = repository.getGoal(userId, id)
+      await repository.resetWeeklyGoals(userId, time.weekKey)
+      const goal = await repository.getGoal(userId, id)
       if (!goal) throw notFound('Goal not found')
       if (goal.current >= goal.target) throw conflict('Goal is already complete')
       const amount = requirePositiveInteger(amountInput, 'amount', goal.target)
       const current = Math.min(goal.target, goal.current + amount)
       const justCompleted = current >= goal.target && !goal.completionAwarded
 
-      return transaction(() => {
-        repository.setGoalProgress(
+      return transaction(async () => {
+        await repository.setGoalProgress(
           userId,
           id,
           current,
           goal.completionAwarded || justCompleted,
           goal.cadence === 'weekly' ? time.weekKey : '',
         )
-        repository.insertGoalProgress(userId, {
+        await repository.insertGoalProgress(userId, {
           id: crypto.randomUUID(),
           goalId: id,
           amount: current - goal.current,
           eventOn: time.eventOn,
           createdAt: time.createdAt,
         })
-        award({
+        await award({
           sourceType: 'goal-progress',
           sourceId: id,
           description: `Progressed: ${goal.name}`,
@@ -278,7 +281,7 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
           time,
         })
         if (justCompleted) {
-          award({
+          await award({
             sourceType: 'goal-complete',
             sourceId: id,
             description: `Completed goal: ${goal.name}`,
@@ -286,22 +289,23 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
             time,
           })
         }
-        return listGoals().find((item) => item.id === id)
+        const goals = await listGoals()
+        return goals.find((item) => item.id === id)
       })
     },
 
-    listEvidence(limit = 20) {
+    async listEvidence(limit = 20) {
       return repository.listEvidence(userId, Math.min(100, Math.max(1, Number(limit) || 20)))
     },
 
     analytics,
 
-    dashboard() {
+    async dashboard() {
       const time = clock()
-      const profile = this.getProfile()
-      const habits = listHabits()
-      const goals = listGoals()
-      const activity = analytics()
+      const profile = await this.getProfile()
+      const habits = await listHabits()
+      const goals = await listGoals()
+      const activity = await analytics()
       return {
         profile: {
           ...profile,
@@ -309,14 +313,14 @@ export function createActivityService({ db, userId, now = () => new Date() }) {
         },
         habits,
         goals,
-        evidence: repository.listEvidence(userId, 8),
+        evidence: await repository.listEvidence(userId, 8),
         analytics: activity,
         today: time.eventOn,
       }
     },
 
-    resetLogs() {
-      transaction(() => repository.resetLogs(userId))
+    async resetLogs() {
+      await transaction(async () => repository.resetLogs(userId))
       return this.dashboard()
     },
   }

@@ -1,6 +1,6 @@
 export function createFinanceRepository(db) {
   return {
-    list(userId) {
+    async list(userId) {
       return db.prepare(`
         SELECT
           id,
@@ -19,7 +19,7 @@ export function createFinanceRepository(db) {
       `).all(userId)
     },
 
-    get(userId, id) {
+    async get(userId, id) {
       return db.prepare(`
         SELECT
           id,
@@ -37,8 +37,8 @@ export function createFinanceRepository(db) {
       `).get(userId, id)
     },
 
-    insert(userId, transaction) {
-      db.prepare(`
+    async insert(userId, transaction) {
+      await db.prepare(`
         INSERT INTO transactions
           (id, user_id, type, account, destination_account, status, category,
            amount_centavos, note, transaction_on, created_at)
@@ -59,26 +59,26 @@ export function createFinanceRepository(db) {
       return this.get(userId, transaction.id)
     },
 
-    updateStatusAndAccount(userId, id, status, account) {
-      db.prepare(`
+    async updateStatusAndAccount(userId, id, status, account) {
+      await db.prepare(`
         UPDATE transactions SET status = ?, account = ?
         WHERE user_id = ? AND id = ?
       `).run(status, account, userId, id)
     },
 
-    updateCategory(userId, id, category) {
-      db.prepare(`
+    async updateCategory(userId, id, category) {
+      await db.prepare(`
         UPDATE transactions SET category = ?
         WHERE user_id = ? AND id = ?
       `).run(category, userId, id)
     },
 
-    delete(userId, id) {
+    async delete(userId, id) {
       return db.prepare('DELETE FROM transactions WHERE user_id = ? AND id = ?').run(userId, id)
     },
 
-    deleteAll(userId) {
-      db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId)
+    async deleteAll(userId) {
+      await db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId)
     },
   }
 }

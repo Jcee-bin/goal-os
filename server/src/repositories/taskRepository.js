@@ -27,18 +27,18 @@ const select = `
 
 export function createTaskRepository(db) {
   return {
-    list(userId) {
-      return db.prepare(`${select} WHERE user_id = ? ORDER BY created_at ASC`)
+    async list(userId) {
+      const rows = await db.prepare(`${select} WHERE user_id = ? ORDER BY created_at ASC`)
         .all(userId)
-        .map(mapTask)
+      return rows.map(mapTask)
     },
 
-    get(userId, id) {
-      return mapTask(db.prepare(`${select} WHERE user_id = ? AND id = ?`).get(userId, id))
+    async get(userId, id) {
+      return mapTask(await db.prepare(`${select} WHERE user_id = ? AND id = ?`).get(userId, id))
     },
 
-    insert(userId, task) {
-      db.prepare(`
+    async insert(userId, task) {
+      await db.prepare(`
         INSERT INTO tasks (
           id, user_id, title, notes, area, priority, scheduled_on,
           start_time, end_time, status, calendar_enabled, calendar_event_id,
@@ -63,8 +63,8 @@ export function createTaskRepository(db) {
       return this.get(userId, task.id)
     },
 
-    update(userId, id, task) {
-      db.prepare(`
+    async update(userId, id, task) {
+      await db.prepare(`
         UPDATE tasks
         SET title = ?, notes = ?, area = ?, priority = ?, scheduled_on = ?,
             start_time = ?, end_time = ?, calendar_enabled = ?,
@@ -87,8 +87,8 @@ export function createTaskRepository(db) {
       return this.get(userId, id)
     },
 
-    setStatus(userId, id, status, completedOn, completedAt, updatedAt) {
-      db.prepare(`
+    async setStatus(userId, id, status, completedOn, completedAt, updatedAt) {
+      await db.prepare(`
         UPDATE tasks
         SET status = ?, completed_on = ?, completed_at = ?, updated_at = ?,
             sync_status = CASE WHEN calendar_enabled = 1 THEN 'pending' ELSE sync_status END
@@ -97,12 +97,12 @@ export function createTaskRepository(db) {
       return this.get(userId, id)
     },
 
-    delete(userId, id) {
+    async delete(userId, id) {
       return db.prepare('DELETE FROM tasks WHERE user_id = ? AND id = ?').run(userId, id)
     },
 
-    setCalendarState(userId, id, { eventId, syncStatus, syncError }) {
-      db.prepare(`
+    async setCalendarState(userId, id, { eventId, syncStatus, syncError }) {
+      await db.prepare(`
         UPDATE tasks
         SET calendar_event_id = ?, sync_status = ?, sync_error = ?, updated_at = ?
         WHERE user_id = ? AND id = ?
@@ -110,14 +110,14 @@ export function createTaskRepository(db) {
       return this.get(userId, id)
     },
 
-    getByCalendarEventId(userId, calendarEventId) {
+    async getByCalendarEventId(userId, calendarEventId) {
       return mapTask(
-        db.prepare(`${select} WHERE user_id = ? AND calendar_event_id = ?`).get(userId, calendarEventId),
+        await db.prepare(`${select} WHERE user_id = ? AND calendar_event_id = ?`).get(userId, calendarEventId),
       )
     },
 
-    applyInboundSync(userId, id, { title, notes, scheduledOn, startTime, endTime, updatedAt }) {
-      db.prepare(`
+    async applyInboundSync(userId, id, { title, notes, scheduledOn, startTime, endTime, updatedAt }) {
+      await db.prepare(`
         UPDATE tasks
         SET title = ?, notes = ?, scheduled_on = ?, start_time = ?, end_time = ?,
             sync_status = 'synced', sync_error = NULL, updated_at = ?
@@ -126,8 +126,8 @@ export function createTaskRepository(db) {
       return this.get(userId, id)
     },
 
-    unlinkCalendar(userId, id, updatedAt) {
-      db.prepare(`
+    async unlinkCalendar(userId, id, updatedAt) {
+      await db.prepare(`
         UPDATE tasks
         SET calendar_event_id = NULL, calendar_enabled = 0,
             sync_status = 'local', sync_error = NULL, updated_at = ?
@@ -136,14 +136,15 @@ export function createTaskRepository(db) {
       return this.get(userId, id)
     },
 
-    listPendingCalendar(userId) {
-      return db.prepare(`
+    async listPendingCalendar(userId) {
+      const rows = await db.prepare(`
         ${select}
         WHERE user_id = ? AND calendar_enabled = 1
           AND scheduled_on IS NOT NULL AND start_time IS NOT NULL
           AND sync_status IN ('pending', 'failed')
         ORDER BY created_at ASC
-      `).all(userId).map(mapTask)
+      `).all(userId)
+      return rows.map(mapTask)
     },
   }
 }

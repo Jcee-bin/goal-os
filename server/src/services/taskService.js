@@ -66,9 +66,10 @@ export function createTaskService({
     }
   }
 
-  function withOverlap(task) {
+  async function withOverlap(task) {
     if (!task.startTime || task.status === 'completed') return { ...task, hasOverlap: false }
-    const hasOverlap = repository.list(userId).some((candidate) => (
+    const allTasks = await repository.list(userId)
+    const hasOverlap = allTasks.some((candidate) => (
       candidate.id !== task.id
       && candidate.status === 'open'
       && candidate.scheduledOn === task.scheduledOn
@@ -79,16 +80,17 @@ export function createTaskService({
     return { ...task, hasOverlap }
   }
 
-  function get(id) {
-    const task = repository.get(userId, id)
+  async function get(id) {
+    const task = await repository.get(userId, id)
     if (!task) throw notFound('Task not found')
     return task
   }
 
   return {
-    list(date = getDateKey(now())) {
+    async list(date = getDateKey(now())) {
       if (!datePattern.test(date)) throw validationError('date', 'date must use YYYY-MM-DD')
-      const tasks = repository.list(userId).map(withOverlap)
+      const allTasks = await repository.list(userId)
+      const tasks = await Promise.all(allTasks.map(withOverlap))
       const open = tasks.filter((task) => task.status === 'open')
       return {
         date,
@@ -110,7 +112,7 @@ export function createTaskService({
 
     async create(input) {
       const timestamp = now().toISOString()
-      const task = repository.insert(userId, {
+      const task = await repository.insert(userId, {
         id: crypto.randomUUID(),
         ...normalize(input),
         createdAt: timestamp,
@@ -120,8 +122,8 @@ export function createTaskService({
     },
 
     async update(id, input) {
-      const existing = get(id)
-      const task = repository.update(userId, id, {
+      const existing = await get(id)
+      const task = await repository.update(userId, id, {
         ...normalize(input, existing),
         updatedAt: now().toISOString(),
       })
@@ -129,10 +131,10 @@ export function createTaskService({
     },
 
     async complete(id) {
-      get(id)
+      await get(id)
       const timestamp = now().toISOString()
       return calendarService.syncTask(
-        repository.setStatus(
+        await repository.setStatus(
           userId,
           id,
           'completed',
@@ -144,21 +146,21 @@ export function createTaskService({
     },
 
     async reopen(id) {
-      get(id)
+      await get(id)
       return withOverlap(await calendarService.syncTask(
-        repository.setStatus(userId, id, 'open', null, null, now().toISOString()),
+        await repository.setStatus(userId, id, 'open', null, null, now().toISOString()),
       ))
     },
 
     async delete(id) {
-      const task = get(id)
-      repository.delete(userId, id)
+      const task = await get(id)
+      await repository.delete(userId, id)
       await calendarService.deleteTask(task)
       return { deleted: true }
     },
 
     async retry(id) {
-      return withOverlap(await calendarService.syncTask(get(id)))
+      return withOverlap(await calendarService.syncTask(await get(id)))
     },
   }
 }

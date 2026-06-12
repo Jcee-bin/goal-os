@@ -1,15 +1,15 @@
 import { accounts, categories, conflict, getDateKey, LOCAL_USER_ID, validationError } from '../domain.js'
 
 export function createImportService({ db, userId = LOCAL_USER_ID, now = () => new Date() }) {
-  function status() {
-    const profile = db.prepare(`
+  async function status() {
+    const profile = await db.prepare(`
       SELECT legacy_imported AS legacyImported FROM profiles WHERE user_id = ?
     `).get(userId)
     return { imported: Boolean(profile.legacyImported), canImport: !profile.legacyImported }
   }
 
-  function importLegacy(payload) {
-    if (!status().canImport) throw conflict('Legacy data has already been imported')
+  async function importLegacy(payload) {
+    if (!(await status()).canImport) throw conflict('Legacy data has already been imported')
     if (!payload || typeof payload !== 'object') {
       throw validationError('payload', 'Import payload is required')
     }
@@ -18,30 +18,30 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
     if (!goal && !budget) throw validationError('payload', 'No legacy data was found')
 
     const timestamp = now().toISOString()
-    db.exec('BEGIN IMMEDIATE')
+    await db.exec('BEGIN IMMEDIATE')
     try {
-      if (goal) importGoalData(goal, timestamp)
-      if (budget) importBudgetData(budget, timestamp)
-      db.prepare(`
+      if (goal) await importGoalData(goal, timestamp)
+      if (budget) await importBudgetData(budget, timestamp)
+      await db.prepare(`
         UPDATE profiles SET legacy_imported = 1 WHERE user_id = ?
       `).run(userId)
-      db.exec('COMMIT')
+      await db.exec('COMMIT')
     } catch (error) {
-      db.exec('ROLLBACK')
+      await db.exec('ROLLBACK')
       throw error
     }
     return { imported: true }
   }
 
-  function importGoalData(goal, timestamp) {
-    db.prepare('DELETE FROM xp_events WHERE user_id = ?').run(userId)
-    db.prepare('DELETE FROM evidence_entries WHERE user_id = ?').run(userId)
-    db.prepare('DELETE FROM goal_progress_events WHERE user_id = ?').run(userId)
-    db.prepare('DELETE FROM habit_completions WHERE user_id = ?').run(userId)
-    db.prepare('DELETE FROM habits WHERE user_id = ?').run(userId)
-    db.prepare('DELETE FROM goals WHERE user_id = ?').run(userId)
+  async function importGoalData(goal, timestamp) {
+    await db.prepare('DELETE FROM xp_events WHERE user_id = ?').run(userId)
+    await db.prepare('DELETE FROM evidence_entries WHERE user_id = ?').run(userId)
+    await db.prepare('DELETE FROM goal_progress_events WHERE user_id = ?').run(userId)
+    await db.prepare('DELETE FROM habit_completions WHERE user_id = ?').run(userId)
+    await db.prepare('DELETE FROM habits WHERE user_id = ?').run(userId)
+    await db.prepare('DELETE FROM goals WHERE user_id = ?').run(userId)
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE profiles
       SET identity = ?, arena = ?, identity_confirmed = ?
       WHERE user_id = ?
@@ -58,7 +58,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       VALUES (?, ?, ?, ?, ?)
     `)
     for (const habit of goal.habits) {
-      insertHabit.run(
+      await insertHabit.run(
         habit.id,
         userId,
         habit.name,
@@ -69,7 +69,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       )
       for (const date of goal.completions[habit.originalId] || []) {
         if (!isDateKey(date)) continue
-        insertCompletion.run(crypto.randomUUID(), userId, habit.id, date, `${date}T12:00:00.000Z`)
+        await insertCompletion.run(crypto.randomUUID(), userId, habit.id, date, `${date}T12:00:00.000Z`)
       }
     }
 
@@ -80,7 +80,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const item of goal.goals) {
-      insertGoal.run(
+      await insertGoal.run(
         item.id,
         userId,
         item.name,
@@ -100,7 +100,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       VALUES (?, ?, 'legacy', NULL, ?, ?, ?, ?)
     `)
     for (const item of goal.evidence) {
-      insertEvidence.run(
+      await insertEvidence.run(
         crypto.randomUUID(),
         userId,
         item.description,
@@ -110,7 +110,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       )
     }
     if (goal.xp > 0) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO xp_events
           (id, user_id, source_type, source_id, amount, event_on, created_at)
         VALUES (?, ?, 'legacy-import', NULL, ?, ?, ?)
@@ -118,8 +118,8 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
     }
   }
 
-  function importBudgetData(budget, timestamp) {
-    db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId)
+  async function importBudgetData(budget, timestamp) {
+    await db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId)
     const insert = db.prepare(`
       INSERT INTO transactions
         (id, user_id, type, account, destination_account, status, category,
@@ -127,7 +127,7 @@ export function createImportService({ db, userId = LOCAL_USER_ID, now = () => ne
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const entry of budget) {
-      insert.run(
+      await insert.run(
         entry.id,
         userId,
         entry.type,

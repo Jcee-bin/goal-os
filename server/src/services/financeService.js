@@ -17,23 +17,23 @@ const PAGE_SIZE = 10
 export function createFinanceService({ db, userId, now = () => new Date() }) {
   const repository = createFinanceRepository(db)
 
-  function transaction(work) {
-    db.exec('BEGIN IMMEDIATE')
+  async function transaction(work) {
+    await db.exec('BEGIN IMMEDIATE')
     try {
-      const result = work()
-      db.exec('COMMIT')
+      const result = await work()
+      await db.exec('COMMIT')
       return result
     } catch (error) {
-      db.exec('ROLLBACK')
+      await db.exec('ROLLBACK')
       throw error
     }
   }
 
-  function all() {
+  async function all() {
     return repository.list(userId)
   }
 
-  function balances(entries = all()) {
+  function balances(entries = []) {
     const result = { cash: 0, bank: 0, savings: 0 }
     for (const entry of entries) {
       if (entry.type === 'income') result[entry.account] += entry.amountCentavos
@@ -48,7 +48,7 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
     return result
   }
 
-  function assertFunds(account, amountCentavos, entries = all()) {
+  function assertFunds(account, amountCentavos, entries = []) {
     const available = balances(entries)[account]
     if (amountCentavos > available) {
       throw conflict(`Not enough ${account}. Available balance is ${available} centavos.`)
@@ -117,7 +117,7 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
     }
   }
 
-  function summary(entries = all(), period = 'month', projected = false) {
+  function summary(entries = [], period = 'month', projected = false) {
     const accountBalances = balances(entries)
     const spent = sum(entries.filter(isPaidExpense))
     const pending = sum(entries.filter(isPendingExpense))
@@ -143,8 +143,8 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
     }
   }
 
-  function listTransactions(filters = {}) {
-    const entries = all().filter((entry) => {
+  async function listTransactions(filters = {}) {
+    const entries = (await all()).filter((entry) => {
       if (filters.startDate && entry.transactionOn < filters.startDate) return false
       if (filters.endDate && entry.transactionOn > filters.endDate) return false
       if (filters.filter && filters.filter !== 'all' && !matchesFilter(entry, filters.filter)) {
@@ -170,13 +170,13 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
   return {
     listTransactions,
 
-    create(input) {
+    async create(input) {
       const normalized = normalizeCreate(input)
       if (
         normalized.type === 'saving'
         || (normalized.type === 'expense' && normalized.status === 'paid')
       ) {
-        assertFunds(normalized.account, normalized.amountCentavos)
+        assertFunds(normalized.account, normalized.amountCentavos, await all())
       }
       return repository.insert(userId, {
         id: crypto.randomUUID(),
@@ -185,60 +185,60 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
       })
     },
 
-    delete(id) {
-      const result = repository.delete(userId, id)
+    async delete(id) {
+      const result = await repository.delete(userId, id)
       if (!result.changes) throw notFound('Transaction not found')
       return { deleted: true }
     },
 
-    bulk(input) {
+    async bulk(input) {
       const ids = Array.isArray(input.ids) ? [...new Set(input.ids)] : []
       if (!ids.length) throw validationError('ids', 'Select at least one transaction')
-      const selected = ids.map((id) => repository.get(userId, id))
+      const selected = await Promise.all(ids.map((id) => repository.get(userId, id)))
       if (selected.some((entry) => !entry)) throw notFound('Transaction not found')
 
-      return transaction(() => {
+      return transaction(async () => {
         if (input.action === 'delete') {
-          selected.forEach((entry) => repository.delete(userId, entry.id))
+          for (const entry of selected) await repository.delete(userId, entry.id)
         } else if (input.action === 'paid') {
           const account = requireEnum(input.account, 'account', accounts)
           const pending = selected.filter(isPendingExpense)
           if (!pending.length) throw conflict('No selected to-pay expenses')
           const total = sum(pending)
-          assertFunds(account, total)
-          pending.forEach((entry) => {
-            repository.updateStatusAndAccount(userId, entry.id, 'paid', account)
-          })
+          assertFunds(account, total, await all())
+          for (const entry of pending) {
+            await repository.updateStatusAndAccount(userId, entry.id, 'paid', account)
+          }
         } else if (input.action === 'to-pay') {
           const paid = selected.filter(isPaidExpense)
           if (!paid.length) throw conflict('No selected paid expenses')
-          paid.forEach((entry) => {
-            repository.updateStatusAndAccount(userId, entry.id, 'to-pay', entry.account)
-          })
+          for (const entry of paid) {
+            await repository.updateStatusAndAccount(userId, entry.id, 'to-pay', entry.account)
+          }
         } else if (input.action === 'categorize') {
           const category = requireEnum(input.category, 'category', categories)
           const compatible = selected.filter((entry) => (
             entry.type === 'expense' ? category !== 'income' : entry.type === 'income' && category === 'income'
           ))
           if (!compatible.length) throw conflict('No selected transactions accept that category')
-          compatible.forEach((entry) => repository.updateCategory(userId, entry.id, category))
+          for (const entry of compatible) await repository.updateCategory(userId, entry.id, category)
         } else {
           throw validationError('action', 'Invalid bulk action')
         }
         return {
           changed: selected.length,
-          summary: summary(),
+          summary: summary(await all()),
         }
       })
     },
 
-    summary(options = {}) {
-      return summary(all(), options.period || 'month', Boolean(options.projected))
+    async summary(options = {}) {
+      return summary(await all(), options.period || 'month', Boolean(options.projected))
     },
 
-    analytics(options = {}) {
+    async analytics(options = {}) {
       const period = options.period || 'month'
-      const allEntries = all()
+      const allEntries = await all()
       const entries = allEntries.filter((entry) => isInPeriod(entry.transactionOn, period, now()))
       const paidExpenses = entries.filter(isPaidExpense)
       const trendMap = new Map()
@@ -263,8 +263,8 @@ export function createFinanceService({ db, userId, now = () => new Date() }) {
       }
     },
 
-    reset() {
-      repository.deleteAll(userId)
+    async reset() {
+      await repository.deleteAll(userId)
       return summary([])
     },
   }

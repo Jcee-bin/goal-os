@@ -1,6 +1,6 @@
 export function createGoogleRepository(db) {
   return {
-    getIntegration(userId) {
+    async getIntegration(userId) {
       return db.prepare(`
         SELECT
           user_id AS userId,
@@ -13,8 +13,8 @@ export function createGoogleRepository(db) {
       `).get(userId)
     },
 
-    saveIntegration(userId, integration) {
-      db.prepare(`
+    async saveIntegration(userId, integration) {
+      await db.prepare(`
         INSERT INTO google_integrations (
           user_id, refresh_token_encrypted, calendar_id, connected_at, updated_at
         ) VALUES (?, ?, ?, ?, ?)
@@ -33,8 +33,8 @@ export function createGoogleRepository(db) {
       return this.getIntegration(userId)
     },
 
-    disconnect(userId, updatedAt) {
-      db.prepare(`
+    async disconnect(userId, updatedAt) {
+      await db.prepare(`
         UPDATE google_integrations
         SET refresh_token_encrypted = NULL, connected_at = NULL,
             last_polled_at = NULL, updated_at = ?
@@ -43,20 +43,20 @@ export function createGoogleRepository(db) {
       return this.getIntegration(userId)
     },
 
-    saveLastPolled(userId, lastPolledAt) {
-      db.prepare(`
+    async saveLastPolled(userId, lastPolledAt) {
+      await db.prepare(`
         UPDATE google_integrations SET last_polled_at = ?, updated_at = ? WHERE user_id = ?
       `).run(lastPolledAt, lastPolledAt, userId)
     },
 
-    saveState(userId, state, expiresAt) {
-      db.prepare(`
+    async saveState(userId, state, expiresAt) {
+      await db.prepare(`
         INSERT INTO google_oauth_states (state, user_id, expires_at) VALUES (?, ?, ?)
       `).run(state, userId, expiresAt)
     },
 
-    consumeState(userId, state, currentTime) {
-      const row = db.prepare(`
+    async consumeState(userId, state, currentTime) {
+      const row = await db.prepare(`
         DELETE FROM google_oauth_states
         WHERE state = ? AND user_id = ? AND expires_at >= ?
         RETURNING state
@@ -64,23 +64,23 @@ export function createGoogleRepository(db) {
       return Boolean(row)
     },
 
-    addDeleteOutbox(userId, eventId, createdAt, error) {
-      db.prepare(`
+    async addDeleteOutbox(userId, eventId, createdAt, error) {
+      await db.prepare(`
         INSERT INTO calendar_outbox
           (id, user_id, event_id, operation, last_error, created_at)
         VALUES (?, ?, ?, 'delete', ?, ?)
       `).run(crypto.randomUUID(), userId, eventId, error, createdAt)
     },
 
-    listOutbox(userId) {
+    async listOutbox(userId) {
       return db.prepare(`
         SELECT id, event_id AS eventId, operation
         FROM calendar_outbox WHERE user_id = ? ORDER BY created_at ASC
       `).all(userId)
     },
 
-    deleteOutbox(id) {
-      db.prepare('DELETE FROM calendar_outbox WHERE id = ?').run(id)
+    async deleteOutbox(id) {
+      await db.prepare('DELETE FROM calendar_outbox WHERE id = ?').run(id)
     },
   }
 }

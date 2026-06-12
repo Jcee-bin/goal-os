@@ -1,11 +1,10 @@
-import { DatabaseSync } from 'node:sqlite'
+import { createClient } from '@libsql/client'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { LOCAL_USER_ID } from './domain.js'
 
 const schema = `
   PRAGMA foreign_keys = ON;
-  PRAGMA journal_mode = WAL;
 
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -190,54 +189,119 @@ const schema = `
     ON sleep_logs(user_id, recorded_on, created_at);
 `
 
-export function createDatabase({ filename = ':memory:', seed = true } = {}) {
-  if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true })
-  const db = new DatabaseSync(filename)
-  rebuildPrototypeSchemaIfNeeded(db)
-  db.exec(schema)
-  migrateCurrentSchema(db)
-  if (seed) seedLocalUser(db)
+export async function createDatabase({ url = 'file:goal-os.db', authToken } = {}) {
+  // Ensure local file directory exists
+  if (url.startsWith('file:')) {
+    const filePath = url.slice(5)
+    if (filePath !== ':memory:') {
+      try { mkdirSync(dirname(filePath), { recursive: true }) } catch { /* ok */ }
+    }
+  }
+
+  const client = createClient({ url, authToken })
+
+  // activeTx tracks in-progress write transaction
+  let activeTx = null
+
+  const db = {
+    prepare(sql) {
+      return {
+        async get(...args) {
+          const result = activeTx
+            ? await activeTx.execute({ sql, args })
+            : await client.execute({ sql, args })
+          return result.rows[0] ?? undefined
+        },
+        async all(...args) {
+          const result = activeTx
+            ? await activeTx.execute({ sql, args })
+            : await client.execute({ sql, args })
+          return [...result.rows]
+        },
+        async run(...args) {
+          const result = activeTx
+            ? await activeTx.execute({ sql, args })
+            : await client.execute({ sql, args })
+          return { changes: result.rowsAffected }
+        },
+      }
+    },
+
+    async exec(sql) {
+      const trimmed = sql.trim()
+      if (trimmed === 'BEGIN IMMEDIATE') {
+        activeTx = await client.transaction('write')
+        return
+      }
+      if (trimmed === 'COMMIT') {
+        if (activeTx) {
+          await activeTx.commit()
+          activeTx = null
+        }
+        return
+      }
+      if (trimmed === 'ROLLBACK') {
+        if (activeTx) {
+          await activeTx.rollback()
+          activeTx = null
+        }
+        return
+      }
+      // For schema/DDL — split and run each statement individually
+      const statements = sql.split(';\n').map((s) => s.trim()).filter(Boolean)
+      for (const stmt of statements) {
+        await client.execute(stmt)
+      }
+    },
+  }
+
+  await rebuildPrototypeSchemaIfNeeded(db)
+  // Run schema statements one by one
+  const schemaStatements = schema.split(';\n').map((s) => s.trim()).filter(Boolean)
+  for (const stmt of schemaStatements) {
+    await client.execute(stmt)
+  }
+  await migrateCurrentSchema(db)
+  await seedLocalUser(db)
   return db
 }
 
-function migrateCurrentSchema(db) {
-  const taskColumns = db.prepare('PRAGMA table_info(tasks)').all().map(({ name }) => name)
+async function migrateCurrentSchema(db) {
+  const taskColumns = (await db.prepare('PRAGMA table_info(tasks)').all()).map(({ name }) => name)
   if (!taskColumns.includes('completed_on')) {
-    db.exec('ALTER TABLE tasks ADD COLUMN completed_on TEXT')
+    await db.exec('ALTER TABLE tasks ADD COLUMN completed_on TEXT')
   }
-  const googleColumns = db.prepare('PRAGMA table_info(google_integrations)').all().map(({ name }) => name)
+  const googleColumns = (await db.prepare('PRAGMA table_info(google_integrations)').all()).map(({ name }) => name)
   if (!googleColumns.includes('last_polled_at')) {
-    db.exec('ALTER TABLE google_integrations ADD COLUMN last_polled_at TEXT')
+    await db.exec('ALTER TABLE google_integrations ADD COLUMN last_polled_at TEXT')
   }
-  const sleepColumns = db.prepare('PRAGMA table_info(sleep_logs)').all().map(({ name }) => name)
+  const sleepColumns = (await db.prepare('PRAGMA table_info(sleep_logs)').all()).map(({ name }) => name)
   if (!sleepColumns.includes('type')) {
-    db.exec("ALTER TABLE sleep_logs ADD COLUMN type TEXT NOT NULL DEFAULT 'night'")
+    await db.exec("ALTER TABLE sleep_logs ADD COLUMN type TEXT NOT NULL DEFAULT 'night'")
   }
 }
 
-function rebuildPrototypeSchemaIfNeeded(db) {
-  const habitsTable = db.prepare(`
+async function rebuildPrototypeSchemaIfNeeded(db) {
+  const habitsTable = await db.prepare(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'habits'
   `).get()
   if (!habitsTable) return
 
-  const columns = db.prepare('PRAGMA table_info(habits)').all().map(({ name }) => name)
+  const columns = (await db.prepare('PRAGMA table_info(habits)').all()).map(({ name }) => name)
   if (columns.includes('user_id')) return
 
-  db.exec(`
-    PRAGMA foreign_keys = OFF;
-    DROP TABLE IF EXISTS habit_completions;
-    DROP TABLE IF EXISTS habits;
-    DROP TABLE IF EXISTS goals;
-    DROP TABLE IF EXISTS profile;
-    PRAGMA foreign_keys = ON;
-  `)
+  await db.exec(`PRAGMA foreign_keys = OFF`)
+  await db.exec(`DROP TABLE IF EXISTS habit_completions`)
+  await db.exec(`DROP TABLE IF EXISTS habits`)
+  await db.exec(`DROP TABLE IF EXISTS goals`)
+  await db.exec(`DROP TABLE IF EXISTS profile`)
+  await db.exec(`PRAGMA foreign_keys = ON`)
 }
 
-function seedLocalUser(db) {
+async function seedLocalUser(db) {
   const now = new Date().toISOString()
-  db.prepare('INSERT OR IGNORE INTO users (id, created_at) VALUES (?, ?)').run(LOCAL_USER_ID, now)
-  db.prepare(`
+  await db.prepare('INSERT OR IGNORE INTO users (id, created_at) VALUES (?, ?)').run(LOCAL_USER_ID, now)
+  await db.prepare(`
     INSERT OR IGNORE INTO profiles
       (user_id, identity, arena, identity_confirmed, legacy_imported)
     VALUES (?, ?, ?, 0, 0)
@@ -247,15 +311,16 @@ function seedLocalUser(db) {
     'Personal growth',
   )
 
-  const habitCount = db.prepare('SELECT COUNT(*) AS count FROM habits WHERE user_id = ?')
-    .get(LOCAL_USER_ID).count
+  const habitRow = await db.prepare('SELECT COUNT(*) AS count FROM habits WHERE user_id = ?')
+    .get(LOCAL_USER_ID)
+  const habitCount = habitRow.count
   if (habitCount === 0) {
     const insertHabit = db.prepare(`
       INSERT INTO habits
         (id, user_id, name, xp, target_per_day, cue, active, created_at)
       VALUES (?, ?, ?, ?, 1, ?, 1, ?)
     `)
-    insertHabit.run(
+    await insertHabit.run(
       '10000000-0000-4000-8000-000000000001',
       LOCAL_USER_ID,
       'Move my body',
@@ -263,7 +328,7 @@ function seedLocalUser(db) {
       'morning',
       now,
     )
-    insertHabit.run(
+    await insertHabit.run(
       '10000000-0000-4000-8000-000000000002',
       LOCAL_USER_ID,
       'Learn for 25 minutes',
@@ -271,7 +336,7 @@ function seedLocalUser(db) {
       'afternoon',
       now,
     )
-    insertHabit.run(
+    await insertHabit.run(
       '10000000-0000-4000-8000-000000000003',
       LOCAL_USER_ID,
       'Sleep reset routine',
@@ -281,10 +346,11 @@ function seedLocalUser(db) {
     )
   }
 
-  const goalCount = db.prepare('SELECT COUNT(*) AS count FROM goals WHERE user_id = ?')
-    .get(LOCAL_USER_ID).count
+  const goalRow = await db.prepare('SELECT COUNT(*) AS count FROM goals WHERE user_id = ?')
+    .get(LOCAL_USER_ID)
+  const goalCount = goalRow.count
   if (goalCount === 0) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO goals
         (id, user_id, name, target, current, unit, cadence, week_key,
          completion_awarded, created_at)

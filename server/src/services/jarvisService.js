@@ -233,7 +233,7 @@ export function createJarvisService({ apiKey, activityService, taskService, fina
 
   async function executeTool(name, args) {
     if (name === 'markHabitDone') {
-      const dashboard = activityService.dashboard()
+      const dashboard = await activityService.dashboard()
       const query = (args.habitName ?? '').toLowerCase().trim()
       const habit = dashboard.habits.find((h) =>
         h.name.toLowerCase() === query ||
@@ -241,7 +241,7 @@ export function createJarvisService({ apiKey, activityService, taskService, fina
         query.includes(h.name.toLowerCase())
       )
       if (!habit) return { ok: false, description: `No habit matching "${args.habitName}"` }
-      activityService.completeHabit(habit.id)
+      await activityService.completeHabit(habit.id)
       return { ok: true, description: `Marked "${habit.name}" done` }
     }
     if (name === 'createTask') {
@@ -260,7 +260,7 @@ export function createJarvisService({ apiKey, activityService, taskService, fina
       return { ok: true, description: `Created task: ${args.title}` }
     }
     if (name === 'addExpense') {
-      financeService.create({
+      await financeService.create({
         type: 'expense',
         amountCentavos: Math.round(args.amountCentavos),
         note: args.note,
@@ -284,7 +284,7 @@ export function createJarvisService({ apiKey, activityService, taskService, fina
       const isNap = args.type === 'nap'
       // Night: bed in evening (>=18 or >=20) and wake in morning (<12) → bed was yesterday
       const isYesterday = !isNap && bedH >= 18 && wakeH < 14
-      sleepService.log({
+      await sleepService.log({
         type: isNap ? 'nap' : 'night',
         sleptAt: hhmm(args.bedtime, isYesterday),
         wokeAt: hhmm(args.waketime, false),
@@ -297,17 +297,17 @@ export function createJarvisService({ apiKey, activityService, taskService, fina
   }
 
   async function chat(message) {
-    const dashboard = activityService.dashboard()
+    const dashboard = await activityService.dashboard()
     const today = getToday()
     const nowDate = now ? now() : new Date()
     const nowTime = nowDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true })
     const tomorrowDate = new Date(nowDate)
     tomorrowDate.setDate(tomorrowDate.getDate() + 1)
     const tomorrowKey = tomorrowDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
-    const tasks = taskService.list(today)
-    const tomorrowTasks = taskService.list(tomorrowKey)
-    const finance = financeService.summary()
-    const sleep = sleepService ? sleepService.analytics() : null
+    const tasks = await taskService.list(today)
+    const tomorrowTasks = await taskService.list(tomorrowKey)
+    const finance = await financeService.summary()
+    const sleep = sleepService ? await sleepService.analytics() : null
     const tomorrowFirst = tomorrowTasks.timed[0] ?? null
     const ctx = buildContext({ dashboard, tasks, finance, sleep, nowTime, tomorrowFirst })
     const system = buildSystemPrompt(ctx, today, nowTime)

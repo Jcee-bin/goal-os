@@ -5,7 +5,7 @@ export function createSleepService({ db, userId, now = () => new Date() }) {
   const repository = createSleepRepository(db)
 
   return {
-    log(input) {
+    async log(input) {
       const sleptAt = String(input.sleptAt ?? '').trim()
       const wokeAt = String(input.wokeAt ?? '').trim()
 
@@ -54,17 +54,17 @@ export function createSleepService({ db, userId, now = () => new Date() }) {
       })
     },
 
-    remove(id) {
-      const result = repository.delete(userId, id)
+    async remove(id) {
+      const result = await repository.delete(userId, id)
       if (result.changes === 0) throw notFound('Sleep log not found')
     },
 
-    listRecent() {
+    async listRecent() {
       return repository.list(userId, 30)
     },
 
-    analytics() {
-      const logs = repository.list(userId, 30)
+    async analytics() {
+      const logs = await repository.list(userId, 30)
 
       const today = getDateKey(now())
       const cutoff = getDateKey(new Date(now().getTime() - 6 * 24 * 60 * 60 * 1000))

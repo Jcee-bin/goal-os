@@ -7,7 +7,10 @@ const here = dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.PORT || 8787)
 const dbPathArg = process.argv.find((a) => a.startsWith('--db-path='))?.split('=').slice(1).join('=')
 const dbFile = dbPathArg ?? resolve(here, '..', 'data', 'goal-os.sqlite')
-const db = createDatabase({ filename: dbFile })
+const db = await createDatabase({
+  url: process.env.TURSO_DATABASE_URL ?? `file:${dbFile}`,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
 const { app, googleService } = createApp({
   db,
   groqApiKey: process.env.GROQ_API_KEY,

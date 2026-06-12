@@ -1,6 +1,6 @@
 export function createSleepRepository(db) {
   return {
-    get(userId, id) {
+    async get(userId, id) {
       return db.prepare(`
         SELECT
           id,
@@ -16,7 +16,7 @@ export function createSleepRepository(db) {
       `).get(userId, id)
     },
 
-    list(userId, limit = 30) {
+    async list(userId, limit = 30) {
       return db.prepare(`
         SELECT
           id,
@@ -35,8 +35,8 @@ export function createSleepRepository(db) {
       `).all(userId, limit)
     },
 
-    insert(userId, log) {
-      db.prepare(`
+    async insert(userId, log) {
+      await db.prepare(`
         INSERT INTO sleep_logs
           (id, user_id, type, slept_at, woke_at, duration_minutes, quality, notes, recorded_on, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -55,7 +55,7 @@ export function createSleepRepository(db) {
       return this.get(userId, log.id)
     },
 
-    delete(userId, id) {
+    async delete(userId, id) {
       return db.prepare('DELETE FROM sleep_logs WHERE user_id = ? AND id = ?').run(userId, id)
     },
   }
