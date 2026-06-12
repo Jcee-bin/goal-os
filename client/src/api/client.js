@@ -5,7 +5,8 @@ export async function api(path, options = {}) {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      response = await fetch(`/api${path}`, {
+      const base = window.electronAPI?.apiBase?.() || ''
+      response = await fetch(`${base}/api${path}`, {
         ...options,
         headers: {
           'content-type': 'application/json',

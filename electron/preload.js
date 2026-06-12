@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // API base URL — empty in dev (Vite proxy), Railway URL in prod
+  apiBase: () => process.env.API_BASE_URL || '',
+
   // Built-in chime path exposed to renderer
   builtinChimePath: () => __dirname + '\\assets\\chime.wav',
 

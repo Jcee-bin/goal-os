@@ -159,7 +159,9 @@ ipcMain.handle('pick-sound-file', async () => {
 
 // ── App lifecycle ──
 app.whenReady().then(() => {
-  if (!isDev) startServer()
+  if (!isDev) {
+    process.env.API_BASE_URL = 'https://goal-os-production-8a7a.up.railway.app'
+  }
 
   createMainWindow()
 
